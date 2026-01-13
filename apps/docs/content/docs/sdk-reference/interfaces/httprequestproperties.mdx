@@ -1,0 +1,135 @@
+---
+title: HttpRequestProperties
+description: Standard properties for HTTP request events.
+---
+
+# HttpRequestProperties
+
+Standard properties for HTTP request events.
+These properties are automatically extracted by FullEvent for first-class
+filtering, dashboards, and error rate calculations.
+
+## Usage
+
+```typescript
+const props: HttpRequestProperties = {
+  status_code: 200,
+  method: 'POST',
+  path: '/api/checkout',
+  duration_ms: 234,
+  outcome: 'success',
+  // Plus any custom properties
+  user_id: 'usr_123',
+  order_total: 9999,
+};
+```
+
+## Properties
+
+<APIReference>
+
+<APIMethod name="HttpRequestProperties.status_code" category="HttpRequestProperties">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription>
+HTTP status code (e.g., 200, 404, 500).
+
+Used for automatic error rate calculations:
+- `< 400` = success
+- `>= 400` = error
+</APIDescription>
+<APIParameters>
+<APIParam name="status_code" type="number" required>
+HTTP status code (e.g., 200, 404, 500).
+</APIParam>
+</APIParameters>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`status_code: number`}</APISignature>
+
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+<APIMethod name="HttpRequestProperties.method" category="HttpRequestProperties">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription>
+HTTP method (GET, POST, PUT, DELETE, etc.)
+
+</APIDescription>
+<APIParameters>
+<APIParam name="method" type="string" >
+HTTP method (GET, POST, PUT, DELETE, etc.)
+</APIParam>
+</APIParameters>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`method?: string`}</APISignature>
+
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+<APIMethod name="HttpRequestProperties.path" category="HttpRequestProperties">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription>
+Request path (e.g., `/api/users`, `/checkout`)
+
+</APIDescription>
+<APIParameters>
+<APIParam name="path" type="string" >
+Request path (e.g., `/api/users`, `/checkout`)
+</APIParam>
+</APIParameters>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`path?: string`}</APISignature>
+
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+<APIMethod name="HttpRequestProperties.duration_ms" category="HttpRequestProperties">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription>
+Request duration in milliseconds.
+
+</APIDescription>
+<APIParameters>
+<APIParam name="duration_ms" type="number" >
+Request duration in milliseconds.
+</APIParam>
+</APIParameters>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`duration_ms?: number`}</APISignature>
+
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+<APIMethod name="HttpRequestProperties.outcome" category="HttpRequestProperties">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription>
+Explicit success/error indicator.
+
+If set, this takes precedence over `status_code` for error rate calculations.
+</APIDescription>
+<APIParameters>
+<APIParam name="outcome" type="'success' | 'error'" >
+Explicit success/error indicator.
+</APIParam>
+</APIParameters>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`outcome?: 'success' | 'error'`}</APISignature>
+
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+</APIReference>

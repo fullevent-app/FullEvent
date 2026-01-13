@@ -1,0 +1,366 @@
+---
+title: WideEvent
+description: A Wide Event captures the complete context of a request in a single,
+---
+
+# WideEvent
+
+A Wide Event captures the complete context of a request in a single,
+self-describing record.
+
+Instead of emitting many small logs, you build one rich event throughout
+the request lifecycle and emit it at the end. This makes debugging and
+analytics significantly easier.
+
+## The Wide Event Pattern
+
+1. **Initialize**: Middleware creates the event with request context
+2. **Enrich**: Handlers add business context throughout the request
+3. **Emit**: Middleware sends the complete event when the request ends
+
+## Auto-Captured Fields
+
+The middleware automatically captures:
+- `request_id`, `trace_id` - For distributed tracing
+- `timestamp` - When the request started
+- `method`, `path` - HTTP method and path
+- `status_code` - HTTP response status
+- `duration_ms` - Total request duration
+- `outcome` - 'success' or 'error'
+- `service`, `environment`, `region` - Infrastructure context
+
+## Your Business Context
+
+Add any fields your application needs:
+
+```typescript
+event.user = { id: 'usr_123', plan: 'premium', ltv_cents: 50000 };
+event.cart = { id: 'cart_xyz', items: 3, total_cents: 15999 };
+event.payment = { provider: 'stripe', method: 'card', latency_ms: 234 };
+event.feature_flags = { new_checkout: true };
+event.experiment = { name: 'pricing_v2', variant: 'control' };
+```
+
+## Usage
+
+### Basic Wide Event
+
+```typescript
+const event: WideEvent = {
+  // Auto-captured by middleware
+  request_id: 'req_abc123',
+  timestamp: '2024-01-15T10:23:45.612Z',
+  method: 'POST',
+  path: '/api/checkout',
+  service: 'checkout-api',
+  status_code: 200,
+  duration_ms: 847,
+  outcome: 'success',
+  
+  // Your business context
+  user: { id: 'usr_456', plan: 'premium' },
+  cart: { total_cents: 15999, items: 3 },
+  payment: { provider: 'stripe', latency_ms: 234 },
+};
+```
+
+## Properties
+
+<APIReference>
+
+<APIMethod name="WideEvent.request_id" category="WideEvent">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription>
+Unique identifier for this request.
+
+Auto-generated or extracted from `x-request-id` / `x-fullevent-trace-id` headers.
+</APIDescription>
+<APIParameters>
+<APIParam name="request_id" type="string" >
+Unique identifier for this request.
+</APIParam>
+</APIParameters>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`request_id?: string`}</APISignature>
+
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+<APIMethod name="WideEvent.trace_id" category="WideEvent">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription>
+Trace ID for distributed tracing.
+
+Propagated across service boundaries via the `x-fullevent-trace-id` header.
+Same as `request_id` by default.
+</APIDescription>
+<APIParameters>
+<APIParam name="trace_id" type="string" >
+Trace ID for distributed tracing.
+</APIParam>
+</APIParameters>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`trace_id?: string`}</APISignature>
+
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+<APIMethod name="WideEvent.timestamp" category="WideEvent">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription>
+ISO timestamp when the request started.
+
+</APIDescription>
+<APIParameters>
+<APIParam name="timestamp" type="string" required>
+ISO timestamp when the request started.
+</APIParam>
+</APIParameters>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`timestamp: string`}</APISignature>
+
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+<APIMethod name="WideEvent.method" category="WideEvent">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription>
+HTTP method (GET, POST, PUT, DELETE, etc.)
+
+</APIDescription>
+<APIParameters>
+<APIParam name="method" type="string" required>
+HTTP method (GET, POST, PUT, DELETE, etc.)
+</APIParam>
+</APIParameters>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`method: string`}</APISignature>
+
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+<APIMethod name="WideEvent.path" category="WideEvent">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription>
+Request path (e.g., `/api/checkout`)
+
+</APIDescription>
+<APIParameters>
+<APIParam name="path" type="string" required>
+Request path (e.g., `/api/checkout`)
+</APIParam>
+</APIParameters>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`path: string`}</APISignature>
+
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+<APIMethod name="WideEvent.status_code" category="WideEvent">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription>
+HTTP status code.
+
+Auto-captured from the response. Used for error rate calculations.
+</APIDescription>
+<APIParameters>
+<APIParam name="status_code" type="number" >
+HTTP status code.
+</APIParam>
+</APIParameters>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`status_code?: number`}</APISignature>
+
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+<APIMethod name="WideEvent.duration_ms" category="WideEvent">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription>
+Request duration in milliseconds.
+
+Auto-captured by middleware in the `finally` block.
+</APIDescription>
+<APIParameters>
+<APIParam name="duration_ms" type="number" >
+Request duration in milliseconds.
+</APIParam>
+</APIParameters>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`duration_ms?: number`}</APISignature>
+
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+<APIMethod name="WideEvent.outcome" category="WideEvent">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription>
+Request outcome: 'success' or 'error'.
+
+Auto-set based on `status_code` (>= 400 = error).
+Can be overridden manually.
+</APIDescription>
+<APIParameters>
+<APIParam name="outcome" type="'success' | 'error'" >
+Request outcome: 'success' or 'error'.
+</APIParam>
+</APIParameters>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`outcome?: 'success' | 'error'`}</APISignature>
+
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+<APIMethod name="WideEvent.service" category="WideEvent">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription>
+Service name (e.g., 'checkout-api', 'user-service').
+
+Set via middleware config. Used for filtering and grouping.
+</APIDescription>
+<APIParameters>
+<APIParam name="service" type="string" required>
+Service name (e.g., 'checkout-api', 'user-service').
+</APIParam>
+</APIParameters>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`service: string`}</APISignature>
+
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+<APIMethod name="WideEvent.region" category="WideEvent">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription>
+Deployment region (e.g., 'us-east-1', 'eu-west-1').
+
+</APIDescription>
+<APIParameters>
+<APIParam name="region" type="string" >
+Deployment region (e.g., 'us-east-1', 'eu-west-1').
+</APIParam>
+</APIParameters>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`region?: string`}</APISignature>
+
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+<APIMethod name="WideEvent.environment" category="WideEvent">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription>
+Environment (e.g., 'production', 'staging', 'development').
+
+Defaults to `NODE_ENV` if not specified.
+</APIDescription>
+<APIParameters>
+<APIParam name="environment" type="string" >
+Environment (e.g., 'production', 'staging', 'development').
+</APIParam>
+</APIParameters>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`environment?: string`}</APISignature>
+
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+<APIMethod name="WideEvent.user_id" category="WideEvent">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription>
+User identifier.
+
+The most commonly enriched field. For richer user context,
+add a `user` object with additional properties.
+</APIDescription>
+<APIParameters>
+<APIParam name="user_id" type="string" >
+User identifier.
+</APIParam>
+</APIParameters>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`user_id?: string`}</APISignature>
+
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+<APIMethod name="WideEvent.error" category="WideEvent">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription>
+Structured error information.
+
+Auto-populated when an exception is thrown. Can also be set manually
+for handled errors (e.g., payment failures).
+</APIDescription>
+<APIParameters>
+<APIParam name="error" type="&#123;
+        /** Error class/type name (e.g., 'TypeError', 'PaymentError') */
+        type: string;
+        /** Human-readable error message */
+        message: string;
+        /** Stack trace (auto-captured for thrown errors) */
+        stack?: string;
+        /** Error code (e.g., 'ECONNREFUSED', 'card_declined') */
+        code?: string;
+        /** Additional error context */
+        [key: string]: unknown;
+    &#125;" >
+Structured error information.
+</APIParam>
+</APIParameters>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`error?: &#123;
+        /** Error class/type name (e.g., 'TypeError', 'PaymentError') */
+        type: string;
+        /** Human-readable error message */
+        message: string;
+        /** Stack trace (auto-captured for thrown errors) */
+        stack?: string;
+        /** Error code (e.g., 'ECONNREFUSED', 'card_declined') */
+        code?: string;
+        /** Additional error context */
+        [key: string]: unknown;
+    &#125;`}</APISignature>
+
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+</APIReference>

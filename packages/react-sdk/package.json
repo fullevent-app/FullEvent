@@ -1,0 +1,19 @@
+{
+    "name": "@fullevent/react",
+    "version": "0.0.1",
+    "main": "./dist/index.js",
+    "module": "./dist/index.mjs",
+    "types": "./dist/index.d.ts",
+    "scripts": {
+        "build": "tsup src/index.tsx --format cjs,esm --dts",
+        "dev": "tsup src/index.tsx --format cjs,esm --dts --watch"
+    },
+    "peerDependencies": {
+        "react": "^19.0.0"
+    },
+    "devDependencies": {
+        "tsup": "^8.0.0",
+        "typescript": "^5.0.0",
+        "@types/react": "^19.0.0"
+    }
+}

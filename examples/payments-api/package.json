@@ -1,0 +1,19 @@
+{
+    "name": "payments-api-example",
+    "version": "1.0.0",
+    "description": "Example payments API demonstrating FullEvent SDK integration",
+    "type": "module",
+    "scripts": {
+        "dev": "tsx watch src/index.ts",
+        "start": "tsx src/index.ts"
+    },
+    "dependencies": {
+        "@fullevent/node-sdk": "workspace:*",
+        "@hono/node-server": "^1.14.1",
+        "hono": "^4.7.5"
+    },
+    "devDependencies": {
+        "tsx": "^4.21.0",
+        "typescript": "^5.8.3"
+    }
+}

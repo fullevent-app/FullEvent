@@ -1,0 +1,30 @@
+---
+title: SDK Reference
+description: Complete API reference for the FullEvent Node.js SDK
+---
+
+# SDK Reference
+
+Complete API reference for the FullEvent Node.js SDK.
+
+## Classes
+
+- [FullEvent](/docs/sdk-reference/classes/fullevent) - The main FullEvent client for ingesting events.
+- [WideEventBuilder](/docs/sdk-reference/classes/wideeventbuilder) - A fluent builder for enriching wide events throughout the request lifecycle.
+
+## Middleware
+
+- [wideLogger](/docs/sdk-reference/middleware/widelogger) - Hono middleware for Wide Event logging.
+- [expressWideLogger](/docs/sdk-reference/middleware/expresswidelogger) - Express middleware for Wide Event logging.
+
+## Interfaces
+
+- [WideEvent](/docs/sdk-reference/interfaces/wideevent) - A Wide Event captures the complete context of a request in a single,
+- [FullEventConfig](/docs/sdk-reference/interfaces/fulleventconfig) - Configuration options for the FullEvent client.
+- [HttpRequestProperties](/docs/sdk-reference/interfaces/httprequestproperties) - Standard properties for HTTP request events.
+- [SamplingConfig](/docs/sdk-reference/interfaces/samplingconfig) - Configuration for tail-based sampling.
+- [WideLoggerConfig](/docs/sdk-reference/interfaces/wideloggerconfig) - Configuration for the wide logger middleware.
+
+## Types
+
+- [WideEventVariables](/docs/sdk-reference/types/wideeventvariables) - Type for Hono context variables.

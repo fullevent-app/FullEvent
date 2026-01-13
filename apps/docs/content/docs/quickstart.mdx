@@ -1,0 +1,49 @@
+---
+title: Quickstart
+description: Get up and running with FullEvent in under 5 minutes.
+---
+
+Welcome to FullEvent! This guide will help you set up your first project and start ingesting events.
+
+## 1. Create a Project
+
+First, head over to your [FullEvent Dashboard](http://localhost:3000) and create a new project. Give it a name that describes your application or service.
+
+## 2. Generate an API Key
+
+Once your project is created, navigate to the **Settings** or **Project** page to generate a new API key. This key will be used to authenticate your requests.
+
+> [!IMPORTANT]
+> Keep your API key secret. Do not share it or expose it in client-side code.
+
+## 3. Install the SDK
+
+Choose the SDK that fits your environment. For most Node.js applications, use the `@fullevent/node-sdk`.
+
+```bash
+pnpm add @fullevent/node-sdk
+```
+
+## 4. Send your First Event
+
+Using the API key you generated, send a test event to confirm everything is working.
+
+```typescript
+import { FullEvent } from '@fullevent/node-sdk';
+
+const fullevent = new FullEvent({ apiKey: 'YOUR_API_KEY' });
+
+await fullevent.ingest('hello_world', {
+  status: 'awesome'
+});
+```
+
+## 5. Verify in the Dashboard
+
+Go back to your dashboard and select your project. You should see your `hello_world` event appearing in the **Event Logs** in real-time!
+
+## Next Steps
+
+- Explore the [Node.js SDK](/docs/sdks/node) for detailed usage.
+- Set up [Hono Middleware](/docs/sdks/hono) for automated request logging.
+- Learn about [Wide Events](/docs/concepts/wide-events) and our tail sampling philosophy.

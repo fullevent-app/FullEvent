@@ -1,0 +1,38 @@
+---
+title: Wide Events
+description: Understand the philosophy behind FullEvent's data model.
+---
+
+Traditional logging often involves thousands of small, disconnected log lines. FullEvent advocates for a different approach: **Wide Events**.
+
+## What are Wide Events?
+
+A Wide Event is a single data structure that captures as much context as possible about a specific unit of work (like an HTTP request or a background job).
+
+Instead of:
+- `[INFO] User 123 started checkout`
+- `[INFO] User 123 added item ABC`
+- `[ERROR] User 123 payment failed`
+
+A Wide Event looks like:
+```json
+{
+  "event": "checkout_completed",
+  "user_id": 123,
+  "cart_value": 99.99,
+  "items": ["ABC"],
+  "error": "insufficient_funds",
+  "duration_ms": 1450,
+  "request_id": "req_5566"
+}
+```
+
+## Benefits
+
+1. **High Fidelity**: You don't lose the relationship between different signals.
+2. **Interactive Exploration**: Every field is a dimension you can filter or group by in our dashboard.
+3. **Reduced Noise**: One rich event is better than fifty flat log lines.
+
+## How we capture them
+
+FullEvent SDKs are designed to "collect" context throughout a request's lifecycle and send it all at once at the end (Tail Sampling). This ensures your dashboard shows the complete picture without you having to manually correlate logs.

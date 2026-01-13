@@ -1,0 +1,166 @@
+---
+title: WideLoggerConfig
+description: Configuration for the wide logger middleware.
+---
+
+# WideLoggerConfig
+
+Configuration for the wide logger middleware.
+
+## Usage
+
+### Minimal Config
+
+```typescript
+wideLogger({
+  apiKey: process.env.FULLEVENT_API_KEY!,
+  service: 'checkout-api',
+})
+```
+
+### Full Config
+
+```typescript
+wideLogger({
+  apiKey: process.env.FULLEVENT_API_KEY!,
+  service: 'checkout-api',
+  environment: 'production',
+  region: 'us-east-1',
+  sampling: {
+    defaultRate: 0.1,
+    alwaysKeepErrors: true,
+    slowRequestThresholdMs: 500,
+  },
+})
+```
+
+## Properties
+
+<APIReference>
+
+<APIMethod name="WideLoggerConfig.apiKey" category="WideLoggerConfig">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription>
+Your FullEvent API key.
+
+Get this from your FullEvent dashboard under Project Settings → API Keys.
+</APIDescription>
+<APIParameters>
+<APIParam name="apiKey" type="string" required>
+Your FullEvent API key.
+</APIParam>
+</APIParameters>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`apiKey: string`}</APISignature>
+
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+<APIMethod name="WideLoggerConfig.service" category="WideLoggerConfig">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription>
+Service name to tag all events with.
+
+Used for filtering and grouping in the dashboard.
+Examples: 'checkout-api', 'user-service', 'payment-worker'
+</APIDescription>
+<APIParameters>
+<APIParam name="service" type="string" required>
+Service name to tag all events with.
+</APIParam>
+</APIParameters>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`service: string`}</APISignature>
+
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+<APIMethod name="WideLoggerConfig.baseUrl" category="WideLoggerConfig">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription>
+Base URL for the FullEvent API.
+
+Only override for self-hosted deployments or local development.
+</APIDescription>
+<APIParameters>
+<APIParam name="baseUrl" type="string"  defaultValue="https://api.fullevent.io">
+Base URL for the FullEvent API.
+</APIParam>
+</APIParameters>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`baseUrl?: string`}</APISignature>
+<APIExamples>{`// Default: https://api.fullevent.io`}</APIExamples>
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+<APIMethod name="WideLoggerConfig.environment" category="WideLoggerConfig">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription>
+Environment tag for all events.
+
+</APIDescription>
+<APIParameters>
+<APIParam name="environment" type="string"  defaultValue="process.env.NODE_ENV or development">
+Environment tag for all events.
+</APIParam>
+</APIParameters>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`environment?: string`}</APISignature>
+<APIExamples>{`// Default: process.env.NODE_ENV or development`}</APIExamples>
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+<APIMethod name="WideLoggerConfig.region" category="WideLoggerConfig">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription>
+Region tag for all events.
+
+Useful for multi-region deployments. Examples: 'us-east-1', 'eu-west-1'
+</APIDescription>
+<APIParameters>
+<APIParam name="region" type="string" >
+Region tag for all events.
+</APIParam>
+</APIParameters>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`region?: string`}</APISignature>
+
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+<APIMethod name="WideLoggerConfig.sampling" category="WideLoggerConfig">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription>
+Sampling configuration for tail-based sampling.
+
+</APIDescription>
+<APIParameters>
+<APIParam name="sampling" type="SamplingConfig" >
+Sampling configuration for tail-based sampling.
+</APIParam>
+</APIParameters>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`sampling?: SamplingConfig`}</APISignature>
+
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+</APIReference>

@@ -1,0 +1,18 @@
+{
+    "name": "checkout-backend",
+    "version": "1.0.0",
+    "type": "module",
+    "scripts": {
+        "dev": "tsx watch src/index.ts"
+    },
+    "dependencies": {
+        "@fullevent/node-sdk": "workspace:*",
+        "@hono/node-server": "^1.14.1",
+        "dotenv": "^17.2.3",
+        "hono": "^4.7.5"
+    },
+    "devDependencies": {
+        "tsx": "^4.19.3",
+        "typescript": "^5.8.3"
+    }
+}

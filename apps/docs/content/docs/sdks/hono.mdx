@@ -1,0 +1,53 @@
+---
+title: Hono Middleware
+description: Automatically log incoming requests and outgoing responses using the FullEvent Hono middleware.
+---
+
+The FullEvent Hono middleware provides automated request and response logging for your Hono applications. It handles tail sampling and rich context extraction out of the box.
+
+## Installation
+
+The middleware is part of the `@fullevent/node-sdk` package.
+
+```bash
+npm install @fullevent/node-sdk
+```
+
+## Setup
+
+To use the middleware, import `createFullEventMiddleware` and apply it to your Hono instance.
+
+```typescript
+import { Hono } from 'hono';
+import { createFullEventMiddleware } from '@fullevent/node-sdk';
+
+const app = new Hono();
+
+app.use('*', createFullEventMiddleware({
+  apiKey: 'your_api_key_here'
+}));
+
+app.get('/', (c) => c.text('Hello FullEvent!'));
+
+export default app;
+```
+
+## Features
+
+- **Automated Logging**: Captures request method, path, headers, and body.
+- **Response Tracking**: Logs status codes and execution time.
+- **Tail Sampling**: Intelligently logs wide events after the request finishes to ensure full context.
+- **Distributed Tracing**: Automatically propagates `x-fullevent-trace-id` headers. [Learn more](/docs/distributed-tracing).
+- **Project Isolation**: All events are correctly routed to your project using the provided API key.
+
+## Advanced Configuration
+
+You can customize the behavior of the middleware using its configuration options.
+
+```typescript
+app.use('*', createFullEventMiddleware({
+  apiKey: 'your_api_key_here',
+  baseUrl: 'http://localhost:3005', // Custom API URL
+  includeHeaders: ['x-request-id', 'user-agent'], // Limit logged headers
+}));
+```

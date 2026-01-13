@@ -1,0 +1,22 @@
+{
+    "name": "fullevent-monorepo",
+    "version": "0.0.0",
+    "private": true,
+    "scripts": {
+        "build": "pnpm -r build",
+        "dev": "pnpm --parallel -r dev",
+        "dev:dashboard": "pnpm --filter @fullevent/dashboard dev",
+        "dev:api": "pnpm --filter @fullevent/api dev",
+        "dev:sdk": "pnpm --filter @fullevent/react dev",
+        "dev:demo": "pnpm --filter @fullevent/demo dev",
+        "dev:docs": "pnpm --filter docs dev",
+        "build:dashboard": "pnpm --filter @fullevent/dashboard build",
+        "build:api": "pnpm --filter @fullevent/api build",
+        "build:sdk": "pnpm --filter @fullevent/react build",
+        "build:docs": "pnpm --filter docs build",
+        "lint": "pnpm -r lint"
+    },
+    "devDependencies": {
+        "typescript": "^5.0.0"
+    }
+}

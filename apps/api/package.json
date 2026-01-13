@@ -1,0 +1,21 @@
+{
+    "name": "@fullevent/api",
+    "version": "0.0.1",
+    "scripts": {
+        "dev": "tsx watch src/index.ts",
+        "build": "tsc"
+    },
+    "dependencies": {
+        "@hono/node-server": "^1.19.7",
+        "@libsql/client": "^0.15.15",
+        "better-auth": "^1.4.10",
+        "drizzle-orm": "^0.45.1",
+        "hono": "^4.0.0",
+        "zod": "^4.3.5"
+    },
+    "devDependencies": {
+        "@types/node": "^20.0.0",
+        "tsx": "^4.0.0",
+        "typescript": "^5.0.0"
+    }
+}

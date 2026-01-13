@@ -1,0 +1,7 @@
+{
+    "name": "test-project",
+    "version": "1.0.0",
+    "dependencies": {
+        "@fullevent/node-sdk": "^0.0.1"
+    }
+}

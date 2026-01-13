@@ -1,0 +1,135 @@
+---
+title: FullEvent
+description: The main FullEvent client for ingesting events.
+---
+
+# FullEvent
+
+The main FullEvent client for ingesting events.
+
+Use this client to send events directly from your application.
+For automatic request logging, see the middleware integrations:
+- [wideLogger](/docs/sdk-reference/middleware/widelogger) for Hono
+- [expressWideLogger](/docs/sdk-reference/middleware/expresswidelogger) for Express
+
+## Usage
+
+### Basic Usage
+
+```typescript
+import { FullEvent } from '@fullevent/node-sdk';
+
+const client = new FullEvent({
+  apiKey: process.env.FULLEVENT_API_KEY!,
+});
+
+// Ingest a simple event
+await client.ingest('user.signup', {
+  plan: 'pro',
+  referral: 'newsletter',
+});
+```
+
+### Fire and Forget
+
+```typescript
+// Don't await if you don't want to block
+client.ingest('page.view', { path: '/home' })
+  .catch(err => console.error('FullEvent error:', err));
+```
+
+## API Reference
+
+<APIReference>
+
+<APIMethod name="new FullEvent(config)" category="FullEvent">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription>
+Creates a new FullEvent client instance.
+</APIDescription>
+
+<APIParameters>
+<APIParam name="config" type="FullEventConfig" required>
+Configuration options
+</APIParam>
+</APIParameters>
+
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`new FullEvent(config: FullEventConfig)`}</APISignature>
+<APIExamples>{`const instance = new FullEvent(config);`}</APIExamples>
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+<APIMethod name="fullevent.ingest(event, properties, timestamp)" category="FullEvent">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription note="Events are processed asynchronously. The promise resolves when">
+Ingest a generic event with any properties.
+</APIDescription>
+
+<APIParameters>
+<APIParam name="event" type="string" required>
+Event name/type (e.g., 'user.signup', 'order.completed')
+</APIParam>
+<APIParam name="properties" type="Record&lt;string, unknown&gt;"  defaultValue="{}">
+Key-value pairs of event data
+</APIParam>
+<APIParam name="timestamp" type="string" >
+Optional ISO timestamp (defaults to now)
+</APIParam>
+</APIParameters>
+
+<APIReturns type="Promise&lt;&#123; success: boolean; error?: unknown &#125;&gt;">Promise resolving to success/error status</APIReturns>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`ingest(event: string, properties?: Record<string, unknown>, timestamp?: string): Promise<{ success: boolean; error?: unknown }>`}</APISignature>
+<APIExamples>{`await client.ingest('checkout.completed', {
+  order_id: 'ord_123',
+  total_cents: 9999,
+  items: 3,
+  user: {
+    id: 'usr_456',
+    plan: 'premium',
+  },
+});`}</APIExamples>
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+<APIMethod name="fullevent.ingestHttpRequest(properties, timestamp)" category="FullEvent">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription note="This is a convenience method that provides TypeScript autocomplete">
+Ingest an HTTP request event with typed properties.
+</APIDescription>
+
+<APIParameters>
+<APIParam name="properties" type="HttpRequestProperties" required>
+HTTP request properties with optional custom data
+</APIParam>
+<APIParam name="timestamp" type="string" >
+Optional ISO timestamp (defaults to now)
+</APIParam>
+</APIParameters>
+
+<APIReturns type="Promise&lt;&#123; success: boolean; error?: unknown &#125;&gt;">Promise resolving to success/error status</APIReturns>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`ingestHttpRequest(properties: HttpRequestProperties, timestamp?: string): Promise<{ success: boolean; error?: unknown }>`}</APISignature>
+<APIExamples>{`await client.ingestHttpRequest({
+  status_code: 200,
+  method: 'POST',
+  path: '/api/checkout',
+  duration_ms: 234,
+  outcome: 'success',
+  // Custom properties
+  user_id: 'usr_123',
+});`}</APIExamples>
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+</APIReference>

@@ -1,0 +1,10 @@
+{
+  "title": "Interfaces",
+  "pages": [
+    "wideevent",
+    "fulleventconfig",
+    "httprequestproperties",
+    "samplingconfig",
+    "wideloggerconfig"
+  ]
+}

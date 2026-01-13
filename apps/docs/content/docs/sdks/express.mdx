@@ -1,0 +1,54 @@
+---
+title: Express.js
+description: Learn how to integrate FullEvent with Express.js applications.
+---
+
+FullEvent works perfectly with Express.js. You can use the Node.js SDK directly or create a simple middleware to automate logging.
+
+## Manual Usage
+
+Inside your route handlers, you can use the `FullEvent` client to ingest events.
+
+```typescript
+import { FullEvent } from '@fullevent/node-sdk';
+
+const fullevent = new FullEvent({ apiKey: process.env.FULLEVENT_API_KEY });
+
+app.post('/api/orders', async (req, res) => {
+  // ... order logic ...
+
+  await fullevent.ingest('order_created', {
+    amount: req.body.total,
+    items: req.body.items.length
+  });
+
+  res.status(201).json({ success: true });
+});
+```
+
+## Creating a Simple Middleware
+
+You can also create a global middleware to log every request.
+
+```typescript
+app.use(async (req, res, next) => {
+  const start = Date.now();
+  
+  // Hook into response finish
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    
+    fullevent.ingest('http_request', {
+      method: req.method,
+      path: req.path,
+      statusCode: res.statusCode,
+      durationMs: duration
+    }).catch(console.error);
+  });
+
+  next();
+});
+```
+
+> [!TIP]
+> For more advanced features like automatic header extraction and tail-sampling, consider using our [Node SDK](/docs/sdks/node) patterns.

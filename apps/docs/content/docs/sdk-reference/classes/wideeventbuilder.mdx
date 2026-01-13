@@ -1,0 +1,318 @@
+---
+title: WideEventBuilder
+description: A fluent builder for enriching wide events throughout the request lifecycle.
+---
+
+# WideEventBuilder
+
+A fluent builder for enriching wide events throughout the request lifecycle.
+
+While you can modify the event object directly (and that's perfectly fine),
+the builder provides chainable methods for cleaner code and useful helpers.
+
+## Two Approaches
+
+**Direct access (simple):**
+```typescript
+const event = c.get('wideEvent');
+event.user = { id: user.id, plan: user.plan };
+event.cart = { total: cart.total, items: cart.items.length };
+```
+
+**Builder pattern (chainable):**
+```typescript
+new WideEventBuilder(c.get('wideEvent'))
+  .setContext('user', { id: user.id, plan: user.plan })
+  .setContext('cart', { total: cart.total, items: cart.items.length })
+  .setTiming('db_latency_ms', dbStart);
+```
+
+## Usage
+
+### Full Example
+
+```typescript
+const builder = new WideEventBuilder(c.get('wideEvent'));
+
+builder
+  .setUser(user.id)
+  .setContext('user', {
+    subscription: user.plan,
+    account_age_days: daysSince(user.createdAt),
+    lifetime_value_cents: user.ltv,
+  })
+  .setContext('cart', {
+    id: cart.id,
+    item_count: cart.items.length,
+    total_cents: cart.total,
+  });
+
+// Later, after payment processing
+builder
+  .setContext('payment', { method: 'card', provider: 'stripe' })
+  .setTiming('payment_latency_ms', paymentStart);
+
+if (paymentError) {
+  builder.setError({
+    type: 'PaymentError',
+    code: paymentError.code,
+    message: paymentError.message,
+    stripe_decline_code: paymentError.declineCode,
+  });
+}
+```
+
+## API Reference
+
+<APIReference>
+
+<APIMethod name="new WideEventBuilder(event)" category="WideEventBuilder">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription>
+Creates a new builder wrapping the given event.
+</APIDescription>
+
+<APIParameters>
+<APIParam name="event" type="WideEvent" required>
+The wide event to enrich
+</APIParam>
+</APIParameters>
+
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`new WideEventBuilder(event: WideEvent)`}</APISignature>
+<APIExamples>{`const instance = new WideEventBuilder(event);`}</APIExamples>
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+<APIMethod name="wideeventbuilder.getEvent()" category="WideEventBuilder">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription>
+Returns the underlying event object for direct access.
+</APIDescription>
+
+<APIReturns type="WideEvent">The wrapped WideEvent</APIReturns>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`getEvent(): WideEvent`}</APISignature>
+<APIExamples>{`const event = builder.getEvent();
+console.log(event.user_id);`}</APIExamples>
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+<APIMethod name="wideeventbuilder.set(key, value)" category="WideEventBuilder">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription>
+Sets any key-value pair on the event.
+</APIDescription>
+
+<APIParameters>
+<APIParam name="key" type="string" required>
+Property name
+</APIParam>
+<APIParam name="value" type="unknown" required>
+Property value (any type)
+</APIParam>
+</APIParameters>
+
+<APIReturns type="this">`this` for chaining</APIReturns>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`set(key: string, value: unknown): this`}</APISignature>
+<APIExamples>{`builder
+  .set('order_id', 'ord_123')
+  .set('llm_model', 'gpt-4')
+  .set('tokens_used', 1500);`}</APIExamples>
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+<APIMethod name="wideeventbuilder.setContext(name, data)" category="WideEventBuilder">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription note="This is the primary method for adding structured business context.">
+Sets a named context object on the event.
+</APIDescription>
+
+<APIParameters>
+<APIParam name="name" type="string" required>
+Context name (e.g., 'user', 'cart', 'payment')
+</APIParam>
+<APIParam name="data" type="Record&lt;string, unknown&gt;" required>
+Context data as key-value pairs
+</APIParam>
+</APIParameters>
+
+<APIReturns type="this">`this` for chaining</APIReturns>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`setContext(name: string, data: Record<string, unknown>): this`}</APISignature>
+<APIExamples>{`builder
+  .setContext('user', {
+    id: 'user_456',
+    subscription: 'premium',
+    account_age_days: 847,
+  })
+  .setContext('cart', {
+    id: 'cart_xyz',
+    item_count: 3,
+    total_cents: 15999,
+  })
+  .setContext('payment', {
+    method: 'card',
+    provider: 'stripe',
+  });`}</APIExamples>
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+<APIMethod name="wideeventbuilder.mergeContext(name, data)" category="WideEventBuilder">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription note="Useful for progressively building context throughout the request.">
+Merges additional fields into an existing context object.
+</APIDescription>
+
+<APIParameters>
+<APIParam name="name" type="string" required>
+Context name to merge into
+</APIParam>
+<APIParam name="data" type="Record&lt;string, unknown&gt;" required>
+Additional data to merge
+</APIParam>
+</APIParameters>
+
+<APIReturns type="this">`this` for chaining</APIReturns>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`mergeContext(name: string, data: Record<string, unknown>): this`}</APISignature>
+<APIExamples>{`// Initial payment context
+builder.setContext('payment', { method: 'card', provider: 'stripe' });
+
+// After payment completes, add timing
+builder.mergeContext('payment', {
+  latency_ms: Date.now() - paymentStart,
+  attempt: 1,
+  transaction_id: 'txn_123',
+});
+
+// Result: { method, provider, latency_ms, attempt, transaction_id }`}</APIExamples>
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+<APIMethod name="wideeventbuilder.setUser(userId)" category="WideEventBuilder">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription note="This sets the top-level 'user_id' field, which is commonly used">
+Sets the user ID on the event.
+</APIDescription>
+
+<APIParameters>
+<APIParam name="userId" type="string" required>
+The user identifier
+</APIParam>
+</APIParameters>
+
+<APIReturns type="this">`this` for chaining</APIReturns>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`setUser(userId: string): this`}</APISignature>
+<APIExamples>{`builder.setUser('usr_123');
+
+// For richer context, also set a user object:
+builder.setContext('user', {
+  id: 'usr_123',
+  plan: 'premium',
+  ltv_cents: 50000,
+});`}</APIExamples>
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+<APIMethod name="wideeventbuilder.setError(err)" category="WideEventBuilder">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription note="Automatically sets 'outcome' to 'error'. Accepts either a native">
+Captures an error with structured details.
+</APIDescription>
+
+<APIParameters>
+<APIParam name="err" type="Error | &#123; type?: string; message: string; code?: string; stack?: string; [key: string]: unknown &#125;" required>
+Error object or custom error details
+</APIParam>
+</APIParameters>
+
+<APIReturns type="this">`this` for chaining</APIReturns>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`setError(err: Error | { type?: string; message: string; code?: string; stack?: string; [key: string]: unknown }): this`}</APISignature>
+<APIExamples>{`try {
+  await riskyOperation();
+} catch (err) {
+  builder.setError(err);
+}`}</APIExamples>
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+<APIMethod name="wideeventbuilder.setStatus(code)" category="WideEventBuilder">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription note="Automatically sets 'outcome' based on the status code:">
+Sets the HTTP status code and outcome.
+</APIDescription>
+
+<APIParameters>
+<APIParam name="code" type="number" required>
+HTTP status code
+</APIParam>
+</APIParameters>
+
+<APIReturns type="this">`this` for chaining</APIReturns>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`setStatus(code: number): this`}</APISignature>
+<APIExamples>{`builder.setStatus(404); // outcome = 'error'
+builder.setStatus(200); // outcome = 'success'`}</APIExamples>
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+<APIMethod name="wideeventbuilder.setTiming(key, startTime)" category="WideEventBuilder">
+<APIMethodContent>
+<APIMethodLeft>
+<APIDescription note="A convenience method for calculating and setting duration values.">
+Records timing for a specific operation.
+</APIDescription>
+
+<APIParameters>
+<APIParam name="key" type="string" required>
+Property name for the timing (e.g., 'db_latency_ms')
+</APIParam>
+<APIParam name="startTime" type="number" required>
+Start timestamp from `Date.now()`
+</APIParam>
+</APIParameters>
+
+<APIReturns type="this">`this` for chaining</APIReturns>
+</APIMethodLeft>
+<APIMethodRight>
+<APISignature>{`setTiming(key: string, startTime: number): this`}</APISignature>
+<APIExamples>{`const dbStart = Date.now();
+const result = await db.query('SELECT ...');
+builder.setTiming('db_latency_ms', dbStart);
+
+const paymentStart = Date.now();
+await processPayment();
+builder.setTiming('payment_latency_ms', paymentStart);`}</APIExamples>
+</APIMethodRight>
+</APIMethodContent>
+</APIMethod>
+
+</APIReference>

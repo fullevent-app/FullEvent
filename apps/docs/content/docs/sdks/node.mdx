@@ -1,0 +1,155 @@
+---
+title: Node.js SDK
+description: Learn how to use the FullEvent Node.js SDK to ingest events from your server-side applications.
+---
+
+The FullEvent Node.js SDK provides a simple and type-safe way to send events to your FullEvent dashboard.
+
+## Installation
+
+You can install the SDK using your favorite package manager:
+
+```bash
+npm install @fullevent/node-sdk
+# or
+pnpm add @fullevent/node-sdk
+# or
+yarn add @fullevent/node-sdk
+```
+
+## Basic Usage
+
+To get started, initialize the `FullEvent` client with your API key.
+
+```typescript
+import { FullEvent } from '@fullevent/node-sdk';
+
+const client = new FullEvent({
+  apiKey: 'your_api_key_here',
+  // Optional: override the default API base URL
+  // baseUrl: 'https://api.fullevent.co'
+});
+```
+
+### Ingesting Events
+
+Use the `ingest` method to send events. It accepts an event name and an optional properties object.
+
+```typescript
+await client.ingest('user_signup', {
+  plan: 'pro',
+  referral: 'newsletter'
+});
+```
+
+## Configuration Options
+
+| Option | Type | Description |
+| :--- | :--- | :--- |
+| `apiKey` | `string` | **Required**. Your FullEvent project API key. |
+| `baseUrl` | `string` | The base URL for the FullEvent API. Defaults to `https://api.fullevent.co`. |
+
+## Advanced Usage
+
+### Working with Metadata
+
+FullEvent handles complex, nested objects automatically. You should include any context that might be useful for debugging or analysis later.
+
+```typescript
+await client.ingest('order_processed', {
+  orderId: 'ord_12345',
+  customer: {
+    id: 'cust_99',
+    email: 'user@example.com',
+    plan: 'enterprise'
+  },
+  metrics: {
+    processingTime: 450,
+    retryCount: 0
+  },
+  tags: ['high-priority', 'international']
+});
+```
+
+### Async/Await and Performance
+
+The `ingest` method returns a Promise, but in most cases, you don't need to `await` it if you don't want to block the response to your user.
+
+```typescript
+// Non-blocking fire-and-forget
+client.ingest('page_view', { path: '/home' }).catch(err => {
+  // Always catch errors to avoid unhandled rejections
+  console.error(err);
+});
+```
+
+## Integration with any Framework
+
+Because the SDK is a standard Node.js package, you can use it in **Next.js API Routes**, **Fastify**, **Express**, or even **Lambda functions**.
+
+### Example: Next.js API Route
+
+```typescript
+import { FullEvent } from '@fullevent/node-sdk';
+
+const fullevent = new FullEvent({ apiKey: process.env.FULLEVENT_API_KEY });
+
+export default async function handler(req, res) {
+  await fullevent.ingest('api_call', { endpoint: 'user_data' });
+  res.status(200).json({ name: 'John Doe' });
+}
+```
+
+## HTTP Request Tracking
+
+For tracking HTTP requests with proper error rate calculations, FullEvent provides the `ingestHttpRequest` helper method with typed properties.
+
+### Standard HTTP Properties
+
+When you include these properties, FullEvent automatically extracts them for first-class filtering and analytics:
+
+| Property | Type | Description |
+| :--- | :--- | :--- |
+| `status_code` | `number` | **Recommended**. HTTP status code (e.g., 200, 404, 500). Used for error rate calculations. |
+| `method` | `string` | HTTP method (GET, POST, PUT, DELETE, etc.) |
+| `path` | `string` | Request path (e.g., `/api/users`) |
+| `duration_ms` | `number` | Request duration in milliseconds |
+| `outcome` | `'success' \| 'error'` | Explicit success/error indicator |
+
+### Using ingestHttpRequest
+
+The `ingestHttpRequest` method provides TypeScript autocomplete for standard properties:
+
+```typescript
+await client.ingestHttpRequest({
+  status_code: 200,
+  method: 'POST',
+  path: '/api/orders',
+  duration_ms: 145,
+  outcome: 'success',
+  // Add any additional context
+  orderId: 'ord_12345',
+  customerId: 'cust_99'
+});
+```
+
+### Error Rate Tracking
+
+FullEvent automatically calculates error rates based on `status_code` and `outcome`:
+
+- **Errors**: `status_code >= 400` or `outcome === 'error'`
+- **Success**: `status_code < 400` or `outcome === 'success'`
+
+```typescript
+// This will be counted as an error
+await client.ingestHttpRequest({
+  status_code: 500,
+  method: 'GET',
+  path: '/api/users',
+  duration_ms: 2500,
+  outcome: 'error'
+});
+```
+
+> [!TIP]
+> FullEvent also recognizes alternative naming conventions like `statusCode`, `http_status`, and `response_code` for flexibility.
