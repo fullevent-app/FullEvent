@@ -40,6 +40,7 @@ export function UserButton() {
                 <Button variant="ghost" className="relative h-8 w-8 rounded-full p-0">
                     <div className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-800 border border-zinc-700">
                         {user.profileImageUrl ? (
+                            /* eslint-disable-next-line @next/next/no-img-element */
                             <img
                                 src={user.profileImageUrl}
                                 alt={user.displayName || "User avatar"}

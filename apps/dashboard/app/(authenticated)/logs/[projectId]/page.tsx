@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { RefreshCcw, Terminal, ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import { LogLineLogo } from "@/components/landing/logo";
+import { LogLineLogo } from "@/components/ui/logo";
 
 interface PageProps {
     params: Promise<{ projectId: string }>;

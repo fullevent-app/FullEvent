@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { deleteProject, getProject } from "@/app/actions/projects";
-import { LogLineLogo } from "@/components/landing/logo";
+import { LogLineLogo } from "@/components/ui/logo";
 
 interface Project {
     id: string;

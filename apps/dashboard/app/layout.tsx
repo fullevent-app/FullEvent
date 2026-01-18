@@ -5,7 +5,7 @@ import { Providers } from "@/components/providers";
 import { stackServerApp } from "@/stack/server";
 import { StackProvider, StackTheme } from "@stackframe/stack";
 import { Suspense } from "react";
-import { LogLineLogo } from "@/components/landing/logo";
+import { LogLineLogo } from "@/components/ui/logo";
 
 
 // Elegant serif for headlines - distinctive, editorial feel

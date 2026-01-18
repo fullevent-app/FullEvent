@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { createProject, getProjects, getSubscriptionDetails } from "@/app/actions/projects";
 import { useFullevent } from "@fullevent/react";
 import { Button } from "@/components/ui/button";
@@ -27,12 +27,7 @@ export default function ProjectsPage() {
     const { createEvent } = useFullevent();
     const [subscription, setSubscription] = useState<{ count: number, max: number } | null>(null);
 
-    useEffect(() => {
-        loadProjects();
-        loadSubscription();
-    }, []);
-
-    const loadSubscription = async () => {
+    const loadSubscription = useCallback(async () => {
         try {
             const data = await getSubscriptionDetails();
             setSubscription({
@@ -45,9 +40,9 @@ export default function ProjectsPage() {
             event.setError(error);
             await event.emit();
         }
-    }
+    }, [createEvent]);
 
-    const loadProjects = async () => {
+    const loadProjects = useCallback(async () => {
         try {
             const data = await getProjects();
             setProjects(data);
@@ -56,7 +51,12 @@ export default function ProjectsPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
+
+    useEffect(() => {
+        loadProjects();
+        loadSubscription();
+    }, [loadProjects, loadSubscription]);
 
     const handleCreateProject = async () => {
         if (!newProjectName.trim()) return;

@@ -1,4 +1,4 @@
-import { LogLineLogo } from "@/components/landing/logo";
+import { LogLineLogo } from "@/components/ui/logo";
 
 export default function Loading() {
     return (

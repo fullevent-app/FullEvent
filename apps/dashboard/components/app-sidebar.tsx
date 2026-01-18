@@ -8,7 +8,7 @@ import { LayoutDashboard, Book, PanelLeftClose, PanelLeftOpen, Sparkles, Crown, 
 import { ThemeToggle } from "./theme-toggle";
 import { Button } from "./ui/button";
 import { UserButton } from "./user-button";
-import { LogLineLogo } from "@/components/landing/logo";
+import { LogLineLogo } from "@/components/ui/logo";
 import { useUser } from "@stackframe/stack";
 
 type SidebarProps = React.HTMLAttributes<HTMLDivElement>;

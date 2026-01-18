@@ -53,7 +53,11 @@ interface PingEvent {
     payload: Record<string, unknown>;
 }
 
-export function Onboarding() {
+interface OnboardingProps {
+    onComplete?: () => void;
+}
+
+export function Onboarding({ onComplete }: OnboardingProps) {
     const [currentStep, setCurrentStep] = useState(1);
     const [projectName, setProjectName] = useState("");
     const [creating, setCreating] = useState(false);
@@ -175,13 +179,17 @@ export function Onboarding() {
         setTestFailed(true);
         playFailSound();
         toast.error("No ping received. Check your configuration and try again.");
-    }, [data.projectId]);
+    }, [data.projectId, createEvent]);
 
     const handleSkip = async () => {
         playClickSound();
         await completeOnboarding();
         // Force a hard reload to ensure user state is refreshed
-        window.location.reload();
+        if (onComplete) {
+            onComplete();
+        } else {
+            window.location.reload();
+        }
     };
 
     const installCode = `npm install @fullevent/node`;
