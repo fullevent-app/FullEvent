@@ -9,7 +9,7 @@
         "dev:api": "pnpm --filter @fullevent/api dev",
         "dev:sdk": "pnpm --filter @fullevent/react dev",
         "dev:docs": "pnpm --filter docs dev",
-        "build:dashboard": "pnpm --filter @fullevent/dashboard build",
+        "build:dashboard": "pnpm build:sdk-react && pnpm build:sdk-node && pnpm --filter @fullevent/dashboard build",
         "build:api": "pnpm --filter @fullevent/api build",
         "build:sdk-react": "pnpm --filter @fullevent/react build",
         "build:sdk-node": "pnpm --filter @fullevent/node build",
