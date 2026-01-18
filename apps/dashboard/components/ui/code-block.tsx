@@ -85,7 +85,7 @@ export function CodeBlock({ code, language = "typescript", fileName, showLineNum
                                     {i + 1}
                                 </span>
                             )}
-                            <span className="whitespace-pre">{highlightSyntax(line)}</span>
+                            <span className="whitespace-pre">{highlightSyntax(line, language)}</span>
                         </div>
                     ))}
                 </code>
@@ -95,7 +95,7 @@ export function CodeBlock({ code, language = "typescript", fileName, showLineNum
 }
 
 // Simple syntax highlighting for common patterns
-function highlightSyntax(line: string): React.ReactNode {
+function highlightSyntax(line: string, _language: string): React.ReactNode {
     // Keywords (removed 'class' to handle separately)
     const keywords = ["import", "export", "from", "const", "let", "var", "function", "async", "await", "return", "if", "else", "new", "interface", "type", "extends", "implements"];
 

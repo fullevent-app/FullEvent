@@ -239,16 +239,10 @@ app.post('/ingest', async (c) => {
     }
 })
 
-const port = 3005;
+const port = 3005
+console.log(`Server is running on port ${port}`)
 
-// Export app for Vercel/Serverless
-export default app;
-
-// Only start the server if not running in Vercel environment
-if (!process.env.VERCEL) {
-    console.log(`Server is running on port ${port}`);
-    serve({
-        fetch: app.fetch,
-        port
-    });
-}
+serve({
+    fetch: app.fetch,
+    port
+})

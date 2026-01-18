@@ -1,12 +1,12 @@
 import { CustomerPortal } from "@polar-sh/nextjs";
-
+import { NextRequest } from "next/server";
 import { stackServerApp } from "@/stack/server";
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
 export const GET = CustomerPortal({
     accessToken: process.env.POLAR_ACCESS_TOKEN!,
-    getCustomerId: async () => {
+    getCustomerId: async (_req: NextRequest) => {
         // Get the authenticated user from Stack Auth
         const user = await stackServerApp.getUser();
         if (!user) {
