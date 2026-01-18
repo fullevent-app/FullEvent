@@ -1,155 +1,248 @@
 ---
 title: Node.js SDK
-description: Learn how to use the FullEvent Node.js SDK to ingest events from your server-side applications.
+description: The official Node.js SDK for FullEvent.
 ---
 
-The FullEvent Node.js SDK provides a simple and type-safe way to send events to your FullEvent dashboard.
+The Node.js SDK is the backbone of your analytics. It's designed to capture the "Wide Event" for every request—automatically tracking duration, status, and context, while letting you enrich it with business data.
 
 ## Installation
 
-You can install the SDK using your favorite package manager:
-
-```bash
-npm install @fullevent/node-sdk
-# or
-pnpm add @fullevent/node-sdk
-# or
-yarn add @fullevent/node-sdk
+```package-install
+npm install @fullevent/node
 ```
 
-## Basic Usage
+## Quick Start
 
-To get started, initialize the `FullEvent` client with your API key.
+The best way to use the SDK is via middleware. This automatically initializes a Wide Event for every request and sends it when the response is finished.
 
-```typescript
-import { FullEvent } from '@fullevent/node-sdk';
+### Hono Middleware (Recommended)
 
-const client = new FullEvent({
-  apiKey: 'your_api_key_here',
-  // Optional: override the default API base URL
-  // baseUrl: 'https://api.fullevent.co'
+FullEvent has first-class support for Hono.
+
+```typescript title="src/server.ts"
+import { Hono } from 'hono';
+import { wideLogger, WideEventVariables } from '@fullevent/node';
+
+const app = new Hono<{ Variables: WideEventVariables }>();
+
+app.use(wideLogger({
+  apiKey: process.env.FULLEVENT_API_KEY!,
+  service: 'my-api',
+}));
+
+app.post('/checkout', async (c) => {
+  // Access the event to add your own context
+  const event = c.get('wideEvent');
+  
+  event.user_id = 'usr_123';
+  event.cart = { total: 4999, items: 3 };
+  
+  return c.json({ success: true });
 });
 ```
 
-### Ingesting Events
+### Express Middleware
 
-Use the `ingest` method to send events. It accepts an event name and an optional properties object.
+You can also use the Express middleware for traditional Express apps.
 
-```typescript
-await client.ingest('user_signup', {
-  plan: 'pro',
-  referral: 'newsletter'
+```typescript title="src/app.ts"
+import express from 'express';
+import { expressWideLogger } from '@fullevent/node';
+
+const app = express();
+
+app.use(expressWideLogger({
+  apiKey: process.env.FULLEVENT_API_KEY!,
+  service: 'my-express-api'
+}));
+
+app.get('/', (req, res) => {
+  // Access event via req.wideEvent
+  req.wideEvent.custom_prop = "hello";
+  res.json({ ok: true });
 });
 ```
 
-## Configuration Options
+### Manual Usage / Server Actions
 
-| Option | Type | Description |
-| :--- | :--- | :--- |
-| `apiKey` | `string` | **Required**. Your FullEvent project API key. |
-| `baseUrl` | `string` | The base URL for the FullEvent API. Defaults to `https://api.fullevent.co`. |
+For modern Next.js Server Actions, generic utility functions, or scripts where middleware isn't an option, use the **Singleton Pattern**.
 
-## Advanced Usage
+First, create a shared client instance:
 
-### Working with Metadata
+```typescript title="lib/fullevent.ts"
+import { FullEvent } from "@fullevent/node";
 
-FullEvent handles complex, nested objects automatically. You should include any context that might be useful for debugging or analysis later.
-
-```typescript
-await client.ingest('order_processed', {
-  orderId: 'ord_12345',
-  customer: {
-    id: 'cust_99',
-    email: 'user@example.com',
-    plan: 'enterprise'
-  },
-  metrics: {
-    processingTime: 450,
-    retryCount: 0
-  },
-  tags: ['high-priority', 'international']
+// Create a single instance to reuse
+export const fullevent = new FullEvent({
+  apiKey: process.env.FULLEVENT_API_KEY!,
 });
 ```
 
-### Async/Await and Performance
+Then import and use it anywhere in your server code:
 
-The `ingest` method returns a Promise, but in most cases, you don't need to `await` it if you don't want to block the response to your user.
+```typescript title="app/actions.ts"
+"use server";
+import { fullevent } from "@/lib/fullevent";
 
-```typescript
-// Non-blocking fire-and-forget
-client.ingest('page_view', { path: '/home' }).catch(err => {
-  // Always catch errors to avoid unhandled rejections
-  console.error(err);
-});
-```
+export async function createTeam(formData: FormData) {
+  // Ingest an event with any properties
+  await fullevent.ingest("team.create", {
+    team_name: formData.get("name"),
+    user_id: "usr_123", // from session
+    plan: "starter"
+  });
 
-## Integration with any Framework
-
-Because the SDK is a standard Node.js package, you can use it in **Next.js API Routes**, **Fastify**, **Express**, or even **Lambda functions**.
-
-### Example: Next.js API Route
-
-```typescript
-import { FullEvent } from '@fullevent/node-sdk';
-
-const fullevent = new FullEvent({ apiKey: process.env.FULLEVENT_API_KEY });
-
-export default async function handler(req, res) {
-  await fullevent.ingest('api_call', { endpoint: 'user_data' });
-  res.status(200).json({ name: 'John Doe' });
+  return { success: true };
 }
 ```
 
-## HTTP Request Tracking
+## Core Concepts
 
-For tracking HTTP requests with proper error rate calculations, FullEvent provides the `ingestHttpRequest` helper method with typed properties.
+### The Wide Event
 
-### Standard HTTP Properties
+Instead of logging "User clicked buy" then "Payment started" then "Payment failed" as separate log lines, FullEvent encourages you to build **one** rich object.
 
-When you include these properties, FullEvent automatically extracts them for first-class filtering and analytics:
+```typescript title="Example Wide Event Structure"
+// Don't do this
+console.log('User 123 clicked buy');
+console.log('Cart total 5000');
+console.error('Payment failed');
 
-| Property | Type | Description |
-| :--- | :--- | :--- |
-| `status_code` | `number` | **Recommended**. HTTP status code (e.g., 200, 404, 500). Used for error rate calculations. |
-| `method` | `string` | HTTP method (GET, POST, PUT, DELETE, etc.) |
-| `path` | `string` | Request path (e.g., `/api/users`) |
-| `duration_ms` | `number` | Request duration in milliseconds |
-| `outcome` | `'success' \| 'error'` | Explicit success/error indicator |
+// Do this (The Wide Event)
+{
+  "request_id": "req_123",
+  "user_id": "usr_123",
+  "cart": { "total": 5000, "items": 2 },
+  "payment": { "status": "failed", "error": "insufficient_funds" },
+  "duration_ms": 450,
+  "outcome": "error"
+}
+```
 
-### Using ingestHttpRequest
+### Using the Event Builder
 
-The `ingestHttpRequest` method provides TypeScript autocomplete for standard properties:
+For more complex scenarios, you can use the `WideEventBuilder` class to build events with a fluent API:
 
-```typescript
-await client.ingestHttpRequest({
-  status_code: 200,
-  method: 'POST',
-  path: '/api/orders',
-  duration_ms: 145,
-  outcome: 'success',
-  // Add any additional context
-  orderId: 'ord_12345',
-  customerId: 'cust_99'
+```typescript title="Using the Builder"
+import { WideEventBuilder } from '@fullevent/node';
+
+app.post('/checkout', async (c) => {
+  const event = c.get('wideEvent');
+  const builder = new WideEventBuilder(event);
+
+  builder
+    .setUser(user.id)
+    .setContext('user', {
+      subscription: user.plan,
+      account_age_days: daysSince(user.createdAt),
+    })
+    .setContext('cart', {
+      id: cart.id,
+      item_count: cart.items.length,
+      total_cents: cart.total,
+    });
+
+  // Later, after payment processing
+  const paymentStart = Date.now();
+  try {
+    await processPayment(cart);
+    builder.setTiming('payment_latency_ms', paymentStart);
+  } catch (err) {
+    builder.setError(err);
+  }
+
+  return c.json({ success: true });
 });
 ```
 
-### Error Rate Tracking
+### Sampling
 
-FullEvent automatically calculates error rates based on `status_code` and `outcome`:
+You can configure sampling to save costs while keeping visibility into errors.
 
-- **Errors**: `status_code >= 400` or `outcome === 'error'`
-- **Success**: `status_code < 400` or `outcome === 'success'`
+```typescript title="src/middleware.ts"
+app.use(wideLogger({
+  apiKey: '...',
+  service: 'my-service',
+  sampling: {
+    defaultRate: 0.1, // Keep 10% of success traffic
+    alwaysKeepErrors: true, // Keep 100% of errors
+    slowRequestThresholdMs: 1000, // Keep anything slower than 1s
+    alwaysKeepPaths: ['/api/checkout', '/api/payment'], // Critical paths
+    alwaysKeepUsers: ['usr_vip_123'] // Debug specific users
+  }
+}));
+```
+
+## API Reference
+
+### FullEvent Class
+
+The main client for ingesting events.
 
 ```typescript
-// This will be counted as an error
-await client.ingestHttpRequest({
-  status_code: 500,
-  method: 'GET',
-  path: '/api/users',
-  duration_ms: 2500,
-  outcome: 'error'
+import { FullEvent } from '@fullevent/node';
+
+const client = new FullEvent({
+  apiKey: process.env.FULLEVENT_API_KEY!,
+  baseUrl: 'https://api.fullevent.app', // optional
+  ping: true, // send a test ping on initialization
 });
 ```
 
-> [!TIP]
-> FullEvent also recognizes alternative naming conventions like `statusCode`, `http_status`, and `response_code` for flexibility.
+#### Methods
+
+**`ingest(event: string, properties: Record<string, unknown>, timestamp?: string)`**
+
+Ingest a generic event with any properties.
+
+```typescript
+await client.ingest('checkout.completed', {
+  order_id: 'ord_123',
+  total_cents: 9999,
+  items: 3,
+  user: {
+    id: 'usr_456',
+    plan: 'premium',
+  },
+});
+```
+
+**`ping()`**
+
+Ping the FullEvent API to verify connection.
+
+```typescript
+const result = await client.ping();
+if (result.success) {
+  console.log(`Connected! Latency: ${result.latency_ms}ms`);
+} else {
+  console.error('Connection failed:', result.error);
+}
+```
+
+### Middleware Configuration
+
+Both `wideLogger` (Hono) and `expressWideLogger` (Express) accept the same configuration:
+
+```typescript
+interface WideLoggerConfig {
+  apiKey: string;           // Your FullEvent API key
+  service: string;          // Service name for tagging
+  baseUrl?: string;         // API base URL (default: https://api.fullevent.app)
+  environment?: string;     // Environment tag (default: NODE_ENV)
+  region?: string;          // Region tag for multi-region deployments
+  sampling?: SamplingConfig; // Sampling configuration
+}
+```
+
+### Sampling Configuration
+
+```typescript
+interface SamplingConfig {
+  defaultRate?: number;              // 0.0 - 1.0, default: 1.0
+  alwaysKeepErrors?: boolean;        // default: true
+  slowRequestThresholdMs?: number;   // default: 2000
+  alwaysKeepPaths?: string[];        // Always keep specific paths
+  alwaysKeepUsers?: string[];        // Always keep specific user IDs
+}
+```

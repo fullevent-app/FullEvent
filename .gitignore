@@ -10,6 +10,11 @@ dist/
 .turbo/
 **/.turbo/
 
+# internal tooling
+apps/demo/
+examples/
+
+
 # Environment files
 .env
 .env.local

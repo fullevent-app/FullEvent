@@ -7,7 +7,7 @@ import { WideEvent } from './index';
  * ```typescript
  * const client = new FullEvent({
  *   apiKey: process.env.FULLEVENT_API_KEY!,
- *   baseUrl: 'https://api.fullevent.io', // optional
+ *   baseUrl: 'https://api.fullevent.app', // optional
  *   ping: true, // send a test ping on initialization
  * });
  * ```
@@ -26,7 +26,7 @@ export interface FullEventConfig {
     /**
      * Base URL for the FullEvent API.
      * 
-     * @defaultValue `'https://api.fullevent.io'`
+     * @defaultValue `'https://api.fullevent.app'`
      * 
      * @remarks
      * Only override this for self-hosted deployments or local development.
@@ -122,7 +122,7 @@ export interface HttpRequestProperties {
  * 
  * @example Basic Usage
  * ```typescript
- * import { FullEvent } from '@fullevent/node-sdk';
+ * import { FullEvent } from '@fullevent/node';
  * 
  * const client = new FullEvent({
  *   apiKey: process.env.FULLEVENT_API_KEY!,
@@ -155,7 +155,7 @@ export class FullEvent {
      */
     constructor(config: FullEventConfig) {
         this.apiKey = config.apiKey;
-        this.baseUrl = config.baseUrl || 'https://api.fullevent.io';
+        this.baseUrl = config.baseUrl || 'https://api.fullevent.app';
 
         // Auto-ping if enabled
         if (config.ping) {
@@ -296,7 +296,7 @@ export class FullEvent {
                 duration_ms: 0, // Will be updated after
 
                 // SDK info
-                sdk: '@fullevent/node-sdk',
+                sdk: '@fullevent/node',
                 sdk_version: '1.0.0',
 
                 // Runtime info

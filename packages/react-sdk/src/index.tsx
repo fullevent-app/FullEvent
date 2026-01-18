@@ -38,6 +38,15 @@ export interface WideEvent {
     [key: string]: unknown;
 }
 
+export type SamplingConfig = {
+    /** Keep 10% of normal requests (0.0 - 1.0) */
+    defaultRate?: number;
+    /** Always keep error outcomes */
+    alwaysKeepErrors?: boolean;
+    /** Always keep slow requests (>ms) */
+    slowRequestThresholdMs?: number;
+};
+
 export type FulleventConfig = {
     apiUrl: string;
     apiKey: string;
@@ -46,7 +55,39 @@ export type FulleventConfig = {
     service?: string;
     /** Environment (defaults to 'browser') */
     environment?: string;
+    /** Sampling configuration */
+    sampling?: SamplingConfig;
 };
+
+// Helper for Consistent Sampling
+function shouldSample(event: WideEvent, config?: SamplingConfig): boolean {
+    const sampling = config ?? {};
+    const defaultRate = sampling.defaultRate ?? 1.0;
+    const alwaysKeepErrors = sampling.alwaysKeepErrors ?? true;
+    const slowThreshold = sampling.slowRequestThresholdMs ?? 2000;
+
+    // Always keep errors
+    if (alwaysKeepErrors) {
+        if (event.outcome === 'error') return true;
+        if (event.status_code && event.status_code >= 400) return true;
+    }
+
+    // Always keep slow requests
+    if (event.duration_ms && event.duration_ms > slowThreshold) return true;
+
+    // Consistent Sampling based on Trace ID
+    if (event.trace_id) {
+        let hash = 5381;
+        const str = event.trace_id;
+        for (let i = 0; i < str.length; i++) {
+            hash = ((hash << 5) + hash) + str.charCodeAt(i);
+        }
+        const normalized = (hash >>> 0) % 10000 / 10000;
+        return normalized < defaultRate;
+    }
+
+    return Math.random() < defaultRate;
+}
 
 // ============================================================
 // Event Builder - Match Node SDK API
@@ -73,7 +114,7 @@ export interface EventBuilder {
 
 function createEventBuilder(
     name: string,
-    sendFn: (event: string, properties: Record<string, unknown>) => Promise<void>,
+    sendFn: (event: string, properties: Record<string, unknown>, wideEvent: WideEvent) => Promise<void>,
     baseContext: Partial<WideEvent>
 ): EventBuilder {
     const startTime = Date.now();
@@ -141,7 +182,7 @@ function createEventBuilder(
             if (!event.outcome) {
                 event.outcome = 'success';
             }
-            await sendFn(name, event as Record<string, unknown>);
+            await sendFn(name, event as Record<string, unknown>, event);
         }
     };
 
@@ -172,7 +213,14 @@ export const FulleventProvider: React.FC<{ config: FulleventConfig; children: Re
         environment: config.environment || 'browser',
     };
 
-    const capture = async (event: string, properties?: Record<string, unknown>) => {
+    const capture = async (event: string, properties?: Record<string, unknown>, wideEvent?: WideEvent) => {
+        // If it's a wide event (via createEvent), check sampling
+        if (wideEvent && !shouldSample(wideEvent, config.sampling)) {
+            if (config.debug) {
+                console.log(`[Fullevent] Sampling dropped event: ${event}`);
+            }
+            return;
+        }
         if (config.debug) {
             console.log(`[Fullevent] Capturing event: ${event}`, properties);
         }

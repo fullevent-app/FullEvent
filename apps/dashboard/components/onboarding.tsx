@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
+import { useFullevent } from "@fullevent/react";
 import { motion, AnimatePresence } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +23,7 @@ import {
     ExternalLink
 } from "lucide-react";
 import { toast } from "sonner";
+import { playClickSound, playSuccessSound, playFailSound, startAmbientLoop, stopAmbientLoop } from "@/lib/sounds";
 
 interface OnboardingData {
     projectId: string | null;
@@ -51,12 +53,14 @@ interface PingEvent {
     payload: Record<string, unknown>;
 }
 
-export function Onboarding({ onComplete }: { onComplete: () => void }) {
+export function Onboarding() {
     const [currentStep, setCurrentStep] = useState(1);
     const [projectName, setProjectName] = useState("");
     const [creating, setCreating] = useState(false);
+    const { createEvent } = useFullevent();
     const [testing, setTesting] = useState(false);
     const [testSuccess, setTestSuccess] = useState(false);
+    const [testFailed, setTestFailed] = useState(false);
     const [copied, setCopied] = useState(false);
     const [pingEvent, setPingEvent] = useState<PingEvent | null>(null);
     const [data, setData] = useState<OnboardingData>({
@@ -80,25 +84,38 @@ export function Onboarding({ onComplete }: { onComplete: () => void }) {
 
     const handleCreateProject = async () => {
         if (!projectName.trim()) return;
+        playClickSound();
         setCreating(true);
+
+        const event = createEvent("onboarding.project_create_attempt");
+        event.set("project_name", projectName);
+
         try {
-            const result = await createProjectWithKey(projectName);
+            const result = await createProjectWithKey(projectName, event.getTraceId());
+
+            event.setStatus(200);
+
             setData({
                 projectId: result.projectId,
                 projectName: result.projectName,
                 apiKey: result.apiKey,
             });
             setCurrentStep(2);
+            playSuccessSound();
             toast.success("Project created!");
-        } catch {
-            toast.error("Failed to create project");
+        } catch (err: unknown) {
+            const error = err instanceof Error ? err : { message: String(err) };
+            event.setError(error);
+            toast.error("Something went wrong. Please try again.");
         } finally {
+            await event.emit();
             setCreating(false);
         }
     };
 
     const copyApiKey = async () => {
         if (data.apiKey) {
+            playClickSound();
             await navigator.clipboard.writeText(data.apiKey);
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
@@ -109,9 +126,12 @@ export function Onboarding({ onComplete }: { onComplete: () => void }) {
     const handleTestConnection = useCallback(async () => {
         if (!data.projectId) return;
 
+        playClickSound();
+        startAmbientLoop();
         setTesting(true);
+        setTestFailed(false);
         let attempts = 0;
-        const maxAttempts = 30;
+        const maxAttempts = 15; // 15 polls * 2s = 30 seconds
 
         const poll = async (): Promise<boolean> => {
             try {
@@ -128,7 +148,10 @@ export function Onboarding({ onComplete }: { onComplete: () => void }) {
                     return true;
                 }
             } catch (error) {
-                console.error("Error checking for events:", error);
+                const event = createEvent("onboarding.event_check_failed");
+                const err = error instanceof Error ? error : { message: String(error) };
+                event.setError(err);
+                await event.emit();
             }
             return false;
         };
@@ -136,8 +159,10 @@ export function Onboarding({ onComplete }: { onComplete: () => void }) {
         while (attempts < maxAttempts) {
             const hasEvents = await poll();
             if (hasEvents) {
+                stopAmbientLoop();
                 setTestSuccess(true);
                 setTesting(false);
+                playSuccessSound();
                 toast.success("Connection successful!");
                 return;
             }
@@ -145,20 +170,25 @@ export function Onboarding({ onComplete }: { onComplete: () => void }) {
             attempts++;
         }
 
+        stopAmbientLoop();
         setTesting(false);
+        setTestFailed(true);
+        playFailSound();
         toast.error("No ping received. Check your configuration and try again.");
     }, [data.projectId]);
 
     const handleSkip = async () => {
+        playClickSound();
         await completeOnboarding();
-        onComplete();
+        // Force a hard reload to ensure user state is refreshed
+        window.location.reload();
     };
 
-    const installCode = `npm install @fullevent/node-sdk`;
+    const installCode = `npm install @fullevent/node`;
 
-    const initCode = `import { FullEvent } from "@fullevent/node-sdk";
+    const initCode = `import { FullEvent } from "@fullevent/node";
  
- export const fullevent = new FullEvent({
+export const fullevent = new FullEvent({
    apiKey: process.env.FULLEVENT_API_KEY,
  });`;
 
@@ -189,6 +219,7 @@ export function Onboarding({ onComplete }: { onComplete: () => void }) {
                                 onChange={(e) => setProjectName(e.target.value)}
                                 className="h-9 flex-1 text-sm"
                                 onKeyDown={(e) => e.key === "Enter" && handleCreateProject()}
+                                maxLength={32}
                                 autoFocus
                             />
                             <Button
@@ -216,7 +247,7 @@ export function Onboarding({ onComplete }: { onComplete: () => void }) {
                                     Save this securely — you won&apos;t see it again
                                 </p>
                             </div>
-                            <div className="px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-xs text-emerald-400">
+                            <div className="px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400">
                                 ✓ {data.projectName} created
                             </div>
                         </div>
@@ -246,7 +277,10 @@ export function Onboarding({ onComplete }: { onComplete: () => void }) {
                                 Show docs
                             </Button>
                             <Button
-                                onClick={() => setCurrentStep(4)}
+                                onClick={() => {
+                                    playClickSound();
+                                    setCurrentStep(4);
+                                }}
                                 size="sm"
                                 className="h-8 px-4 bg-violet-600 hover:bg-violet-500 text-white text-xs"
                             >
@@ -258,45 +292,39 @@ export function Onboarding({ onComplete }: { onComplete: () => void }) {
             case 4:
                 if (testSuccess) {
                     return (
-                        <>
-                            <div className="flex items-center justify-between mb-3">
-                                <div>
-                                    <h3 className="text-sm font-medium text-white flex items-center gap-2">
-                                        <Check className="h-3.5 w-3.5 text-cyan-400" />
-                                        Connection successful!
-                                    </h3>
-                                    <p className="text-xs text-muted-foreground">
-                                        Ping received. You can now remove the ping code.
-                                    </p>
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <Check className="h-3.5 w-3.5 text-emerald-400" />
+                                <span className="text-sm text-white">Connection verified</span>
+                            </div>
+                            <Button
+                                onClick={() => {
+                                    setTestSuccess(false);
+                                    setTestFailed(false);
+                                    setPingEvent(null);
+                                }}
+                                variant="ghost"
+                                size="sm"
+                                className="text-xs text-zinc-400 hover:text-white h-7 px-2"
+                            >
+                                Retry
+                            </Button>
+                        </div>
+                    );
+                }
+                if (testFailed) {
+                    return (
+                        <div className="flex flex-col justify-center h-full">
+                            <div className="flex items-center justify-between mb-2">
+                                <h3 className="text-sm font-medium text-white">Connection failed</h3>
+                                <div className="px-2 py-0.5 bg-red-500/10 border border-red-500/20 text-xs text-red-400 rounded-full">
+                                    Timeout
                                 </div>
                             </div>
-
-                            {pingEvent && (
-                                <div className="mb-4 rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-[10px] uppercase font-mono text-zinc-500">Event Payload</span>
-                                        </div>
-                                        <span className="text-[10px] text-zinc-600 font-mono">
-                                            {new Date(pingEvent.timestamp).toLocaleTimeString()}
-                                        </span>
-                                    </div>
-                                    <pre className="text-[10px] leading-relaxed font-mono text-zinc-300 overflow-x-auto">
-                                        {JSON.stringify(pingEvent.payload, null, 2)}
-                                    </pre>
-                                </div>
-                            )}
-
-                            <div className="flex justify-end">
-                                <Button
-                                    onClick={handleSkip}
-                                    size="sm"
-                                    className="h-8 px-4 bg-violet-600 hover:bg-violet-500 text-white text-xs"
-                                >
-                                    Go to Dashboard
-                                </Button>
-                            </div>
-                        </>
+                            <p className="text-xs text-zinc-500">
+                                See troubleshooting steps below.
+                            </p>
+                        </div>
                     );
                 }
                 return (
@@ -383,7 +411,7 @@ export function Onboarding({ onComplete }: { onComplete: () => void }) {
                 <div className="w-full max-w-4xl">
                     {/* Step cards row - compact height */}
                     {/* Step cards row - compact height */}
-                    <div className="flex gap-3 h-[120px]">
+                    <div className="flex gap-3 min-h-[120px]">
                         {stepConfigs.map((step) => {
                             const status = getStepStatus(step.id);
                             const isActive = status === "active";
@@ -396,7 +424,7 @@ export function Onboarding({ onComplete }: { onComplete: () => void }) {
                                     key={step.id}
                                     onClick={() => isComplete && setCurrentStep(step.id)}
                                     className={`
-                                        relative rounded-xl border
+                                        relative border
                                         transition-all duration-300 ease-out
                                         ${isActive
                                             ? "bg-zinc-900 border-zinc-700 flex-[4]"
@@ -416,7 +444,7 @@ export function Onboarding({ onComplete }: { onComplete: () => void }) {
                                         `}
                                     >
                                         <div className={`
-                                            relative w-10 h-10 rounded-lg flex items-center justify-center mb-2
+                                            relative w-10 h-10 flex items-center justify-center mb-2
                                             ${isComplete
                                                 ? "bg-emerald-500/20 text-emerald-400"
                                                 : "bg-zinc-800 text-zinc-500"
@@ -452,7 +480,7 @@ export function Onboarding({ onComplete }: { onComplete: () => void }) {
                                     >
                                         {/* Icon column */}
                                         <div className="shrink-0">
-                                            <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-cyan-500/20 text-cyan-400">
+                                            <div className="w-10 h-10 flex items-center justify-center bg-cyan-500/20 text-cyan-400">
                                                 <StepIcon className="h-5 w-5" />
                                             </div>
                                         </div>
@@ -509,6 +537,7 @@ export function Onboarding({ onComplete }: { onComplete: () => void }) {
                                         </Button>
                                         <Button
                                             onClick={() => {
+                                                playClickSound();
                                                 setCurrentStep(3);
                                             }}
                                             size="sm"
@@ -557,6 +586,98 @@ export function Onboarding({ onComplete }: { onComplete: () => void }) {
                                         <p className="text-xs text-zinc-400 mb-2 font-medium">3. Send test ping <span className="text-zinc-500">(visit the page/route to trigger)</span></p>
                                         <CodeBlock code={pingCode} language="typescript" />
                                     </div>
+                                </div>
+                            </motion.div>
+                        )}
+                        {currentStep === 4 && testSuccess && pingEvent && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -10 }}
+                                transition={{ duration: 0.2 }}
+                                className="mt-6 space-y-4"
+                            >
+                                <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4">
+                                    <div className="flex items-center gap-3 mb-4">
+                                        <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0">
+                                            <Check className="h-4 w-4 text-emerald-400" />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-sm font-medium text-white">Connection successful!</h3>
+                                            <p className="text-xs text-zinc-400">Your first event was received. You can now remove the ping code.</p>
+                                        </div>
+                                    </div>
+                                    <div className="rounded-md border border-zinc-800 bg-zinc-950/50 p-3">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <span className="text-[10px] uppercase font-mono text-zinc-500">Event Payload</span>
+                                            <span className="text-[10px] text-zinc-600 font-mono">
+                                                {new Date(pingEvent.timestamp).toLocaleTimeString()}
+                                            </span>
+                                        </div>
+                                        <pre className="text-[10px] leading-relaxed font-mono text-zinc-300 overflow-x-auto max-h-40 overflow-y-auto">
+                                            {JSON.stringify(pingEvent.payload, null, 2)}
+                                        </pre>
+                                    </div>
+                                </div>
+                                <div className="flex justify-end">
+                                    <Button
+                                        onClick={handleSkip}
+                                        size="sm"
+                                        className="h-9 px-5 bg-violet-600 hover:bg-violet-500 text-white text-xs"
+                                    >
+                                        Go to Dashboard
+                                    </Button>
+                                </div>
+                            </motion.div>
+                        )}
+                        {currentStep === 4 && testFailed && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -10 }}
+                                transition={{ duration: 0.2 }}
+                                className="mt-6 space-y-4"
+                            >
+                                <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-4">
+                                    <div className="flex items-start gap-3">
+                                        <div className="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                                            <X className="h-4 w-4 text-red-400" />
+                                        </div>
+                                        <div className="flex-1">
+                                            <div className="flex items-center justify-between mb-1">
+                                                <h3 className="text-sm font-medium text-white">Connection failed</h3>
+                                                <div className="px-2 py-0.5 bg-red-500/10 border border-red-500/20 text-xs text-red-400 rounded-full">
+                                                    Timed out
+                                                </div>
+                                            </div>
+                                            <p className="text-xs text-zinc-400 mb-3">No ping received after 30 seconds.</p>
+
+                                            <div className="text-xs text-zinc-400 bg-zinc-950/50 p-3 rounded border border-zinc-800 font-mono">
+                                                Check that your API key is correct and your code is calling <span className="text-cyan-400">fullevent.ping()</span>.
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 justify-end">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="text-xs text-zinc-400 hover:text-white h-9 px-3"
+                                        onClick={handleSkip}
+                                    >
+                                        Skip for now
+                                    </Button>
+                                    <Button
+                                        onClick={() => {
+                                            setTestFailed(false);
+                                            handleTestConnection();
+                                        }}
+                                        size="sm"
+                                        className="h-9 px-4 bg-violet-600 hover:bg-violet-500 text-white text-xs"
+                                    >
+                                        Retry Connection
+                                    </Button>
                                 </div>
                             </motion.div>
                         )}

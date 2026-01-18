@@ -1,49 +1,265 @@
 ---
 title: Quickstart
-description: Get up and running with FullEvent in under 5 minutes.
+description: Get up and running in minutes.
 ---
 
-Welcome to FullEvent! This guide will help you set up your first project and start ingesting events.
+This guide will help you integrate FullEvent into a **Fullstack Next.js Application**. We'll build a real-world "Checkout Flow" that tracks a user clicking "Pay" on the frontend and traces it all the way to the backend payment processing.
 
-## 1. Create a Project
+## Prerequisites
 
-First, head over to your [FullEvent Dashboard](http://localhost:3000) and create a new project. Give it a name that describes your application or service.
+1.  A FullEvent account (or local instance).
+2.  A Project API Key.
 
-## 2. Generate an API Key
+## Step 1: Install SDKs
 
-Once your project is created, navigate to the **Settings** or **Project** page to generate a new API key. This key will be used to authenticate your requests.
+Install both the React (Client) and Node (Server) SDKs.
+
+```package-install
+npm install @fullevent/react @fullevent/node
+```
+
+## How It Works
+
+FullEvent uses a **Distributed Tracing** model. This means you have two separate pieces of the puzzle that link together:
+
+1.  **React SDK (Browser)**: Tracks user interactions (clicks, navigations). It generates a unique `trace_id`.
+2.  **Node SDK (Server)**: Tracks API logic and database calls. It listens for that `trace_id` to link its logs to the frontend user session.
+
+---
+
+## Part 1: The Frontend (React)
+
+First, wrap your application in the `FulleventProvider`. This initializes the SDK in the browser.
+
+<CodeShowcase title="Frontend Configuration">
+<CodeFile path="app/layout.tsx" code={`
+import { FulleventProvider } from "@fullevent/react";
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en">
+      <body>
+        <FulleventProvider
+          config={{
+            apiUrl: "https://api.fullevent.app",
+            apiKey: process.env.FULLEVENT_API_KEY!,
+            service: "checkout-app",
+          }}
+        >
+          {children}
+        </FulleventProvider>
+      </body>
+    </html>
+  );
+}
+`} />
+
+<CodeFile path="app/page.tsx" code={`
+"use client";
+
+import { useFullevent } from "@fullevent/react";
+
+export default function CheckoutPage() {
+  const { createEvent } = useFullevent();
+
+  const handleCheckout = async () => {
+    // 1. Start Client-Side Event
+    const event = createEvent("checkout.process");
+    
+    // 2. Pass the trace headers to your API
+    // This allows the backend to "join" this trace
+    await fetch("/api/checkout", {
+      method: "POST",
+      headers: event.getHeaders(), 
+      body: JSON.stringify({ item: "socks" }),
+    });
+
+    // 3. Send the frontend log
+    await event.emit();
+  };
+
+  return <button onClick={handleCheckout}>Pay Now</button>;
+}
+`} />
+</CodeShowcase>
+
+---
+
+## Part 2: The Backend (Node.js)
+
+Now, your server receives the request. You can use **Middleware** (for automatic logging) or **Manual Mode** (for Server Actions).
+
+### Option A: API Reference (Middleware)
+Zero-config logging for API Routes. It automatically grabs the `trace_id` from the headers you sent in step 1.
+
+> **Scaling**: Using multiple routes? Simply wrap each route handler (e.g., `api/users/route.ts`, `api/billing/route.ts`) with the same `wideLogger` helper. They will all automatically respect the trace.
+
+<CodeShowcase title="Backend API (Middleware)">
+<CodeFile path="app/api/checkout/route.ts" code={`
+import { NextRequest, NextResponse } from "next/server";
+import { wideLogger, type WideEvent } from "@fullevent/node";
+
+// Middleware wraps your handler
+export const POST = wideLogger(async (req: NextRequest, event: WideEvent) => {
+  
+  // You now have a unified trace! 🔗
+  // This event is linked to the frontend user session.
+  event.processing_time = 450;
+  event.status = "paid";
+
+  return NextResponse.json({ success: true });
+});
+`} />
+</CodeShowcase>
+
+### Option B: Server Actions (Manual)
+For Server Actions or utility files, use the **Singleton Pattern**.
+
+> **Scaling**: Create one `lib/fullevent.ts` file. Then import that same `fullevent` instance everywhere.
+> **Linking/Tracing**: Since Server Actions are function calls, you must pass the `trace_id` as an argument to link them to the frontend.
+
+<CodeShowcase title="Singleton Pattern (Manual)">
+<CodeFile path="lib/fullevent.ts" code={`
+import { FullEvent } from "@fullevent/node";
+
+export const fullevent = new FullEvent({
+  apiKey: process.env.FULLEVENT_API_KEY,
+});
+
+`} />
+
+<CodeFile path="app/actions.ts" code={`
+"use server";
+import { fullevent } from "@/lib/fullevent";
+
+// Accept traceId from the frontend
+export async function createTeam(traceId: string) {
+  
+  // Pass it to ingest() to link the traces! 🔗
+  await fullevent.ingest("team.create", { 
+    trace_id: traceId,
+    user_id: "usr_123" 
+  });
+}
+`} />
+
+<CodeFile path="app/page.tsx" code={`
+"use client";
+import { useFullevent } from "@fullevent/react";
+import { createTeam } from "./actions";
+
+export default function Page() {
+  const { createEvent } = useFullevent();
+
+  const handleClick = async () => {
+    // 1. Create frontend event
+    const event = createEvent("button.click");
+
+    try {
+      // 2. Pass the trace_id to the Server Action
+      await createTeam(event.getTraceId());
+      event.setStatus(200);
+    } catch (e) {
+      event.setError(e);
+    } finally {
+      await event.emit();
+    }
+  };
+
+  return <button onClick={handleClick}>Create</button>;
+}
+`} />
+</CodeShowcase>
+
+## Advanced: Monorepo Setup
+
+If you are running a monorepo with separate frontend and backend services (e.g., Turborepo), the pattern is exactly the same. You just need to ensure the `trace_id` crosses the service boundary.
+
+In this example, our **Storefront** (Next.js) talks to a separate **Inventory Service** (Hono/Node).
+
+<CodeShowcase>
+<CodeFile path="apps/storefront/app/page.tsx" code={`
+"use client";
+
+import { useFullevent } from "@fullevent/react";
+
+export default function ProductPage() {
+  const { createEvent } = useFullevent();
+
+  const checkStock = async () => {
+    // 1. Trace starts here (Client)
+    const event = createEvent("stock.check");
+    event.set("sku", "sku_123");
+
+    // 2. Call separate backend service
+    await fetch("https://api.inventory.com/check", {
+      headers: {
+        // Pass the trace context!
+        ...event.getHeaders(), 
+        "Authorization": "Bearer users-token"
+      }
+    });
+
+    await event.emit();
+  };
+
+  return <button onClick={checkStock}>Check Availability</button>;
+}
+`} />
+
+<CodeFile path="apps/inventory-service/src/index.ts" code={`
+import { Hono } from "hono";
+import { wideLogger } from "@fullevent/node";
+
+const app = new Hono();
+
+// 3. Hono Middleware automatically picks up the trace_id
+// from the request headers
+app.use(wideLogger({
+  service: "inventory-service",
+  apiKey: process.env.FULLEVENT_KEY
+}));
+
+app.get("/check", async (c) => {
+  const event = c.get("wideEvent");
+
+  // This logs with the SAME trace_id as the frontend! 🔗
+  console.log("Checking stock for trace:", event.trace_id);
+
+  // Add microservice-specific context
+  event.warehouse = "us-east-1";
+  event.stock_level = 42;
+
+  return c.json({ available: true });
+});
+
+export default app;
+`} />
+</CodeShowcase>
 
 > [!IMPORTANT]
-> Keep your API key secret. Do not share it or expose it in client-side code.
+> **How Frontend & Backend Connect**
+> 
+> The `wideLogger` middleware does **not** capture or proxy frontend events. 
+> 1. **Frontend**: Sends its own event directly to FullEvent API.
+> 2. **Backend**: Creates its own separate event when the API request hits.
+> 3. **The Link**: The shared `trace_id` (passed in headers) tells FullEvent to group these two distinct events into a single "Trace" view in your dashboard.
 
-## 3. Install the SDK
+## Step 2: Verify
 
-Choose the SDK that fits your environment. For most Node.js applications, use the `@fullevent/node-sdk`.
+Start your app, click "Pay", and check the FullEvent Dashboard. You will see a single trace containing both the client performance data and the server-side payment logic!
 
-```bash
-pnpm add @fullevent/node-sdk
-```
+---
 
-## 4. Send your First Event
+## F.A.Q.
 
-Using the API key you generated, send a test event to confirm everything is working.
+### Do I have to use Hono?
+**No.** Hono is primarily used for its excellent middleware system, which our `wideLogger` leverages for "Zero Config" logging.
+However, if you are using standard Next.js Route Handlers or Server Actions, you do **not** need Hono. Simply use **Option B (Singleton Pattern)**. It provides the exact same tracing capabilities without the middleware wrapper.
 
-```typescript
-import { FullEvent } from '@fullevent/node-sdk';
-
-const fullevent = new FullEvent({ apiKey: 'YOUR_API_KEY' });
-
-await fullevent.ingest('hello_world', {
-  status: 'awesome'
-});
-```
-
-## 5. Verify in the Dashboard
-
-Go back to your dashboard and select your project. You should see your `hello_world` event appearing in the **Event Logs** in real-time!
-
-## Next Steps
-
-- Explore the [Node.js SDK](/docs/sdks/node) for detailed usage.
-- Set up [Hono Middleware](/docs/sdks/hono) for automated request logging.
-- Learn about [Wide Events](/docs/concepts/wide-events) and our tail sampling philosophy.
+### Do I have to build my own middleware?
+For standard Next.js API Routes (without Hono), you don't need to "build" middleware. You just use the Singleton client (`fullevent.ingest`) directly in your code. This gives you more control and works in places where middleware cannot run (like Server Actions, CRON jobs, and Queue workers).

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Check, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { playClickSound } from "@/lib/sounds";
 
 interface CodeBlockProps {
     code: string;
@@ -16,6 +17,7 @@ export function CodeBlock({ code, language = "typescript", fileName, showLineNum
     const [copied, setCopied] = useState(false);
 
     const handleCopy = async () => {
+        playClickSound();
         await navigator.clipboard.writeText(code);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
@@ -97,13 +99,18 @@ function highlightSyntax(line: string, _language: string): React.ReactNode {
     // Keywords (removed 'class' to handle separately)
     const keywords = ["import", "export", "from", "const", "let", "var", "function", "async", "await", "return", "if", "else", "new", "interface", "type", "extends", "implements"];
 
-    // Split into tokens and highlight
     let result = line;
+    const placeholders: string[] = [];
 
-    // Highlight strings (both single and double quotes)
-    result = result.replace(/(["'`])([^"'`]*)\1/g, '<span class="text-emerald-400">$1$2$1</span>');
+    // 1. Extract strings and replace with placeholders
+    // This prevents special characters like // inside strings from triggering comments
+    result = result.replace(/(["'`])([^"'`]*)\1/g, (match) => {
+        const placeholder = `__STR_${placeholders.length}__`;
+        placeholders.push(`<span class="text-emerald-400">${match}</span>`);
+        return placeholder;
+    });
 
-    // Highlight comments
+    // 2. Highlight comments
     if (result.includes("//")) {
         const commentIndex = result.indexOf("//");
         const beforeComment = result.slice(0, commentIndex);
@@ -111,18 +118,22 @@ function highlightSyntax(line: string, _language: string): React.ReactNode {
         result = beforeComment + `<span class="text-zinc-500 italic">${comment}</span>`;
     }
 
-    // Highlight keywords
+    // 3. Highlight keywords
     keywords.forEach(keyword => {
         const regex = new RegExp(`\\b(${keyword})\\b`, "g");
         result = result.replace(regex, '<span class="text-cyan-400">$1</span>');
     });
 
-    // Special handling for 'class' keyword to avoid matching HTML attributes
-    // Matches 'class' only when NOT followed by '=' (ignoring whitespace)
+    // 4. Special handling for 'class' keyword
     result = result.replace(/\b(class)\b(?!\s*=)/g, '<span class="text-cyan-400">$1</span>');
 
-    // Highlight function calls
+    // 5. Highlight function calls
     result = result.replace(/\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g, '<span class="text-yellow-400">$1</span>(');
+
+    // 6. Restore strings
+    placeholders.forEach((html, index) => {
+        result = result.replace(`__STR_${index}__`, html);
+    });
 
     // Render with dangerouslySetInnerHTML for the highlighting
     return <span dangerouslySetInnerHTML={{ __html: result }} />;

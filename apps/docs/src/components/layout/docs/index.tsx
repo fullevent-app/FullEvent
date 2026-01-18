@@ -7,6 +7,7 @@ import Link from 'fumadocs-core/link';
 import { useSearchContext } from 'fumadocs-ui/contexts/search';
 import { cva } from 'class-variance-authority';
 import { usePathname } from 'fumadocs-core/framework';
+import { LogLineLogo } from '@/components/logo/logo';
 
 interface SidebarContext {
   open: boolean;
@@ -27,7 +28,7 @@ export function DocsLayout({ tree, children }: DocsLayoutProps) {
         <header className="sticky top-0 bg-fd-background/80 backdrop-blur-md border-b border-fd-border/50 h-14 z-30">
           <nav className="flex flex-row items-center gap-2 size-full px-6">
             <Link href="/" className="flex items-center gap-2 font-bold text-xl tracking-tight">
-              <div className="size-6 bg-fd-primary rounded-md" />
+              <LogLineLogo size={24} animated={false} variant="stream" />
               FullEvent
             </Link>
 

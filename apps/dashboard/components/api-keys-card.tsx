@@ -10,7 +10,6 @@ import { Copy, Plus, Trash2 } from "lucide-react";
 import { getProjectKeys, createProjectKey, revokeProjectKey } from "@/app/actions/projects";
 
 import { useFullevent } from "@fullevent/react";
-import { authClient } from "@/lib/auth-client";
 
 // Key type for display purposes
 type ProjectKey = {
@@ -30,7 +29,6 @@ export function ApiKeysCard({ projectId }: ProjectSettingsProps) {
     const [creating, setCreating] = useState(false);
     const [newKey, setNewKey] = useState<string | null>(null);
     const { capture } = useFullevent();
-    const { data: session } = authClient.useSession();
 
     useEffect(() => {
         loadKeys();
@@ -60,11 +58,6 @@ export function ApiKeysCard({ projectId }: ProjectSettingsProps) {
                 capture('api_key_created', {
                     projectId,
                     keyId: res.id,
-                    user: {
-                        id: session?.user?.id,
-                        email: session?.user?.email,
-                        name: session?.user?.name
-                    }
                 });
             }
         } catch {
@@ -84,11 +77,6 @@ export function ApiKeysCard({ projectId }: ProjectSettingsProps) {
             capture('api_key_revoked', {
                 projectId,
                 keyId,
-                user: {
-                    id: session?.user?.id,
-                    email: session?.user?.email,
-                    name: session?.user?.name
-                }
             });
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : "Failed to revoke key";

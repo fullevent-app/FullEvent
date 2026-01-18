@@ -1,0 +1,69 @@
+---
+title: Distributed Tracing
+description: Connect your frontend interactions to your backend logs.
+---
+
+Distributed tracing is the "superpower" of FullEvent. It allows you to tell a complete story from the moment a user clicks a button to the final database query on your server.
+
+## The Problem
+
+In a typical stack, you have:
+1.  **Frontend Logs**: "User clicked checkout"
+2.  **Backend Logs**: "API /checkout called", "Database error"
+
+These are usually disconnected. If a user complains "Checkout failed", you have to guess which API log matches that user's session.
+
+## The Solution: Trace IDs
+
+FullEvent connects these worlds using a **Trace ID**.
+
+1.  The **React SDK** generates a unique `trace_id` when an action starts.
+2.  it passes this ID to the **Backend** via a mechanism like HTTP headers.
+3.  The **Node SDK** sees this ID and adopts it for its own logs.
+
+## How to Implement
+
+### 1. Frontend: Start the Trace
+Use `createEvent` to start a wide event context and get the headers.
+
+```tsx title="src/components/Checkout.tsx"
+// Frontend (React)
+const { createEvent } = useFullevent();
+
+async function handleBuy() {
+  const event = createEvent('buy.flow');
+  
+  await fetch('/api/buy', {
+    method: 'POST',
+    // ⬇️ This is the magic line
+    headers: event.getHeaders() 
+  });
+}
+```
+
+### 2. Backend: Continue the Trace
+Ensure your backend is using the `wideLogger` middleware. It automatically looks for the `x-fullevent-trace-id` header.
+
+```typescript title="src/server.ts"
+// Backend (Hono/Node)
+app.use(wideLogger({ ... }));
+
+app.post('/buy', (c) => {
+  // The 'wideEvent' here AUTOMATICALLY has the same trace_id 
+  // as the frontend event!
+  const event = c.get('wideEvent');
+  
+  console.log(event.trace_id); // Matches the frontend!
+  return c.json({ ok: true });
+});
+```
+
+## Visualizing Traces
+
+In the FullEvent dashboard, clicking any log that has a `trace_id` will automatically search for all other logs with that same ID. You will see a timeline view showing:
+
+1.  **Frontend**: User Clicked Buy (0ms)
+2.  **Network**: Request sending...
+3.  **Backend**: API Processing started (50ms)
+4.  **Backend**: Payment Charged (150ms)
+5.  **Backend**: Response Sent (160ms)

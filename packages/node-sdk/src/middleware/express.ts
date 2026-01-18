@@ -40,7 +40,20 @@ function shouldSample(event: WideEvent, config?: SamplingConfig): boolean {
     // Always keep specific users
     if (event.user_id && sampling.alwaysKeepUsers?.includes(String(event.user_id))) return true;
 
-    // Random sample the rest
+    // Consistent Sampling based on Trace ID
+    // DJB2 hash for simple, string-based consistency
+    if (event.trace_id) {
+        let hash = 5381;
+        const str = event.trace_id;
+        for (let i = 0; i < str.length; i++) {
+            hash = ((hash << 5) + hash) + str.charCodeAt(i);
+        }
+        // Normalize to 0.0 - 1.0 (using 10000 for 4 decimal precision)
+        const normalized = (hash >>> 0) % 10000 / 10000;
+        return normalized < defaultRate;
+    }
+
+    // Fallback if no trace ID (shouldn't happen usually)
     return Math.random() < defaultRate;
 }
 
@@ -71,7 +84,7 @@ function shouldSample(event: WideEvent, config?: SamplingConfig): boolean {
  * @example Quick Start
  * ```typescript
  * import express from 'express';
- * import { expressWideLogger } from '@fullevent/node-sdk';
+ * import { expressWideLogger } from '@fullevent/node';
  * 
  * const app = express();
  * 

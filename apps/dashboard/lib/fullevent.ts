@@ -1,4 +1,4 @@
-import { FullEvent } from "@fullevent/node-sdk";
+import { FullEvent } from "@fullevent/node";
 
 export const fullEvent = new FullEvent({
     apiKey: process.env.FULLEVENT_API_KEY || "ufgbTzJJyqXBaFINkARDnHfuTDpahFwqFsIqzmKSNsaNItjNYAFZUgTxvwLlISLP",

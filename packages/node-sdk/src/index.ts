@@ -8,7 +8,7 @@
  * ## Installation
  * 
  * ```bash
- * npm install @fullevent/node-sdk
+ * npm install @fullevent/node
  * ```
  * 
  * ## Quick Start
@@ -16,7 +16,7 @@
  * ### Direct Event Ingestion
  * 
  * ```typescript
- * import { FullEvent } from '@fullevent/node-sdk';
+ * import { FullEvent } from '@fullevent/node';
  * 
  * const client = new FullEvent({
  *   apiKey: process.env.FULLEVENT_API_KEY!,
@@ -29,7 +29,7 @@
  * 
  * ```typescript
  * import { Hono } from 'hono';
- * import { wideLogger, WideEventVariables } from '@fullevent/node-sdk';
+ * import { wideLogger, WideEventVariables } from '@fullevent/node';
  * 
  * const app = new Hono<{ Variables: WideEventVariables }>();
  * 
@@ -46,7 +46,7 @@
  * });
  * ```
  * 
- * @module @fullevent/node-sdk
+ * @module @fullevent/node
  */
 
 export * from './middleware/hono';

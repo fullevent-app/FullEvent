@@ -90,7 +90,6 @@ export const POST = wideLogger(async (
   const body = await req.json();
 
   // Same trace_id as frontend! 🎯
-  console.log("Trace:", event.trace_id);
 
   // Enrich with business context
   event.cart = {

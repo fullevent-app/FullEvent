@@ -36,6 +36,7 @@ export function LogSearchInput({ onSearch, isLoading, dynamicSuggestions }: LogS
     // Current key being typed (e.g., "status" when user typed "status:")
     const [activeKey, setActiveKey] = React.useState<string | null>(null);
     const [open, setOpen] = React.useState(false);
+    const [selectedIndex, setSelectedIndex] = React.useState(-1);
 
     const containerRef = React.useRef<HTMLDivElement>(null);
     const inputRef = React.useRef<HTMLInputElement>(null);
@@ -134,6 +135,7 @@ export function LogSearchInput({ onSearch, isLoading, dynamicSuggestions }: LogS
         const val = e.target.value;
         setInputValue(val);
         setOpen(true);
+        setSelectedIndex(-1); // Reset selection on input change
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -166,12 +168,43 @@ export function LogSearchInput({ onSearch, isLoading, dynamicSuggestions }: LogS
 
         // Handle Enter - complete the current filter
         if (e.key === "Enter") {
+            // Priority 1: Select highlighted suggestion
+            if (open && selectedIndex >= 0 && selectedIndex < currentSuggestions.length) {
+                selectSuggestion(currentSuggestions[selectedIndex]);
+                e.preventDefault();
+                return;
+            }
+
+            // Priority 2: Complete filter with typed value if active key
             if (activeKey && inputValue.trim()) {
                 // Complete the filter
                 setFilters(prev => [...prev, { key: activeKey, value: inputValue.trim() }]);
                 setActiveKey(null);
                 setInputValue("");
                 setOpen(false);
+                setSelectedIndex(-1);
+            }
+            // Priority 3: Default Enter behavior (form submit / search) - fallback handled by effect
+            // But we prevent default if we have a partial filter to avoid confusion
+            if (activeKey) {
+                e.preventDefault();
+            }
+        }
+
+        // Handle Arrows
+        if (e.key === "ArrowDown") {
+            if (!open) {
+                setOpen(true);
+                setSelectedIndex(0);
+            } else {
+                setSelectedIndex(prev => (prev < currentSuggestions.length - 1 ? prev + 1 : prev));
+            }
+            e.preventDefault();
+        }
+
+        if (e.key === "ArrowUp") {
+            if (open) {
+                setSelectedIndex(prev => (prev > 0 ? prev - 1 : prev));
             }
             e.preventDefault();
         }
@@ -183,6 +216,7 @@ export function LogSearchInput({ onSearch, isLoading, dynamicSuggestions }: LogS
                 setInputValue("");
             }
             setOpen(false);
+            setSelectedIndex(-1);
         }
     };
 
@@ -197,8 +231,12 @@ export function LogSearchInput({ onSearch, isLoading, dynamicSuggestions }: LogS
             // Adding a key - activate it
             setActiveKey(suggestion);
             setInputValue("");
+            // Adding a key - activate it
+            setActiveKey(suggestion);
+            setInputValue("");
             setOpen(true);
         }
+        setSelectedIndex(-1);
         inputRef.current?.focus();
     };
 
@@ -287,11 +325,17 @@ export function LogSearchInput({ onSearch, isLoading, dynamicSuggestions }: LogS
                     <p className="px-2 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider bg-zinc-900/50 border-b border-zinc-800 sticky top-0">
                         {activeKey ? `Select ${activeKey} value` : "Available filters"}
                     </p>
-                    {currentSuggestions.map(s => (
+                    {currentSuggestions.map((s, idx) => (
                         <button
                             key={s}
                             onClick={() => selectSuggestion(s)}
-                            className="flex items-center w-full px-3 py-2 text-sm hover:bg-zinc-800 text-left transition-colors border-l-2 border-transparent hover:border-zinc-600"
+                            onMouseEnter={() => setSelectedIndex(idx)} // Mouse sync
+                            className={cn(
+                                "flex items-center w-full px-3 py-2 text-sm text-left transition-colors border-l-2",
+                                idx === selectedIndex
+                                    ? "bg-zinc-800 border-zinc-600 outline-none"
+                                    : "hover:bg-zinc-800 border-transparent hover:border-zinc-600"
+                            )}
                         >
                             {activeKey ? (
                                 <span className="font-medium text-blue-400">{s}</span>

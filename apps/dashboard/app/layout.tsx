@@ -2,6 +2,11 @@ import type { Metadata } from "next";
 import { Instrument_Serif, DM_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
+import { stackServerApp } from "@/stack/server";
+import { StackProvider, StackTheme } from "@stackframe/stack";
+import { Suspense } from "react";
+import { LogLineLogo } from "@/components/landing/logo";
+
 
 // Elegant serif for headlines - distinctive, editorial feel
 const instrumentSerif = Instrument_Serif({
@@ -35,7 +40,19 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${instrumentSerif.variable} ${dmSans.variable} ${jetbrainsMono.variable}`}>
       <body className="font-sans antialiased">
-        <Providers>{children}</Providers>
+        <Suspense fallback={
+          <div className="flex items-center justify-center min-h-screen bg-black">
+            <LogLineLogo size={48} animated={true} variant="stream" autoPlay={true} />
+          </div>
+        }>
+          <StackProvider app={stackServerApp}>
+            <StackTheme>
+              <Providers>
+                {children}
+              </Providers>
+            </StackTheme>
+          </StackProvider>
+        </Suspense>
       </body>
     </html>
   );

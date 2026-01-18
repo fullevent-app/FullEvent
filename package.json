@@ -8,11 +8,11 @@
         "dev:dashboard": "pnpm --filter @fullevent/dashboard dev",
         "dev:api": "pnpm --filter @fullevent/api dev",
         "dev:sdk": "pnpm --filter @fullevent/react dev",
-        "dev:demo": "pnpm --filter @fullevent/demo dev",
         "dev:docs": "pnpm --filter docs dev",
         "build:dashboard": "pnpm --filter @fullevent/dashboard build",
         "build:api": "pnpm --filter @fullevent/api build",
-        "build:sdk": "pnpm --filter @fullevent/react build",
+        "build:sdk-react": "pnpm --filter @fullevent/react build",
+        "build:sdk-node": "pnpm --filter @fullevent/node build",
         "build:docs": "pnpm --filter docs build",
         "lint": "pnpm -r lint"
     },

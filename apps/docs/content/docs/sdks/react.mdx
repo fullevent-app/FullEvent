@@ -1,0 +1,264 @@
+---
+title: React SDK
+description: The official React SDK for FullEvent.
+---
+
+The React SDK helps you capture user interactions on the client side and associate them with your backend traces. It handles session context, user identification, and buffering.
+
+## Installation
+
+```package-install
+npm install @fullevent/react
+```
+
+## Setup
+
+Wrap your application in the `FulleventProvider`.
+
+```tsx title="src/app/layout.tsx"
+import { FulleventProvider } from '@fullevent/react';
+
+export default function RootLayout({ children }) {
+  return (
+    <FulleventProvider 
+      config={{
+        apiUrl: 'https://api.fullevent.app',
+        apiKey: process.env.NEXT_PUBLIC_FULLEVENT_KEY!,
+        service: 'frontend',
+        environment: 'production', // optional
+        debug: false, // optional, enables console logging
+        sampling: { // optional
+          defaultRate: 1.0,
+          alwaysKeepErrors: true,
+          slowRequestThresholdMs: 2000,
+        }
+      }}
+    >
+      <html lang="en">
+        <body>{children}</body>
+      </html>
+    </FulleventProvider>
+  );
+}
+```
+
+## Usage
+
+Use the `useFullevent` hook to capture events, identify users, or create wide events.
+
+### Quick Event Capture
+
+For simple event tracking, use the `capture` method:
+
+```tsx title="src/components/SignupButton.tsx"
+import { useFullevent } from '@fullevent/react';
+
+export function SignupButton() {
+  const { capture, setUser } = useFullevent();
+
+  const handleSignup = async () => {
+    // 1. Capture the click
+    await capture('signup.clicked', { component: 'hero_cta' });
+
+    // 2. Identify the user after login
+    setUser('usr_123');
+  };
+
+  return <button onClick={handleSignup}>Sign Up</button>;
+}
+```
+
+### Building Wide Events
+
+For more complex scenarios where you need to accumulate context throughout a user flow, use `createEvent` to get an event builder:
+
+```tsx title="src/components/Checkout.tsx"
+import { useFullevent } from '@fullevent/react';
+
+export function CheckoutFlow() {
+  const { createEvent } = useFullevent();
+
+  const handleCheckout = async () => {
+    // Create a wide event builder
+    const event = createEvent('checkout.flow');
+
+    // Add context as you go
+    event.set('cart_id', 'cart_123');
+    event.set('items_count', 3);
+    event.setUser('usr_456');
+
+    // Add more context
+    event.set('payment_method', 'card');
+    event.set('total_cents', 9999);
+
+    try {
+      const result = await processCheckout();
+      event.setStatus(200);
+    } catch (err) {
+      event.setError(err);
+      event.setStatus(500);
+    } finally {
+      // Emit the complete event
+      await event.emit();
+    }
+  };
+
+  return <button onClick={handleCheckout}>Complete Checkout</button>;
+}
+```
+
+## Connecting to Backend (Distributed Tracing)
+
+The most powerful feature of FullEvent is connecting frontend interactions to backend logs. 
+
+When you make an API call, pass the **Trace ID** from the React SDK to your backend using the event builder's `getHeaders()` method.
+
+```tsx title="src/components/Checkout.tsx"
+import { useFullevent } from '@fullevent/react';
+
+function Checkout() {
+  const { createEvent } = useFullevent();
+
+  const handleCheckout = async () => {
+    // Create a new wide event context
+    const event = createEvent('checkout.flow');
+
+    // Get headers that contain the trace_id
+    const headers = event.getHeaders(); 
+    // headers = { 'x-fullevent-trace-id': 'abc-123...' }
+
+    // Add initial context
+    event.set('cart_id', cart.id);
+    event.set('items', cart.items.length);
+
+    try {
+      // Pass trace ID to backend
+      const response = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...headers, // Pass trace ID to backend
+        },
+        body: JSON.stringify({ cartId: cart.id })
+      });
+
+      event.setStatus(response.status);
+      
+      if (!response.ok) {
+        event.setError({ 
+          type: 'CheckoutError',
+          message: 'Checkout failed' 
+        });
+      }
+    } catch (err) {
+      event.setError(err);
+    } finally {
+      // Emit the complete event
+      await event.emit();
+    }
+    
+    // The backend will now log everything under the same trace_id!
+  };
+
+  return <button onClick={handleCheckout}>Checkout</button>;
+}
+```
+
+## API Reference
+
+### FulleventProvider Props
+
+```typescript
+interface FulleventConfig {
+  apiUrl: string;              // FullEvent API URL
+  apiKey: string;              // Your public API key
+  service?: string;            // Service name for tagging
+  environment?: string;        // Environment tag (default: 'browser')
+  debug?: boolean;             // Enable console logging
+  sampling?: SamplingConfig;   // Sampling configuration
+}
+```
+
+### useFullevent Hook
+
+Returns an object with three methods:
+
+**`capture(event: string, properties?: Record<string, unknown>)`**
+
+Quick fire-and-forget event capture.
+
+```typescript
+await capture('button.clicked', { 
+  button_id: 'cta-hero',
+  page: '/home' 
+});
+```
+
+**`createEvent(name: string): EventBuilder`**
+
+Create a wide event builder for accumulating context.
+
+```typescript
+const event = createEvent('checkout.flow');
+event.set('cart_id', 'cart_123');
+event.setUser('usr_456');
+await event.emit();
+```
+
+**`setUser(userId: string)`**
+
+Set global user context for all future events.
+
+```typescript
+setUser('usr_123');
+```
+
+### EventBuilder Interface
+
+The object returned by `createEvent()` has the following methods:
+
+```typescript
+interface EventBuilder {
+  set(key: string, value: unknown): EventBuilder;
+  setUser(userId: string): EventBuilder;
+  setError(err: Error | { type?: string; message: string; code?: string }): EventBuilder;
+  setStatus(code: number): EventBuilder;
+  getEvent(): WideEvent;
+  getTraceId(): string;
+  getHeaders(): Record<string, string>;
+  emit(): Promise<void>;
+}
+```
+
+**Example:**
+
+```typescript
+const event = createEvent('payment.process');
+
+event
+  .set('payment_method', 'card')
+  .set('amount_cents', 9999)
+  .setUser('usr_123')
+  .setStatus(200);
+
+// Get trace ID for backend correlation
+const traceId = event.getTraceId();
+
+// Get headers to pass to fetch
+const headers = event.getHeaders();
+
+// Emit when done
+await event.emit();
+```
+
+### Sampling Configuration
+
+Control which events are sent to reduce costs while maintaining visibility:
+
+```typescript
+sampling: {
+  defaultRate: 0.1,              // Keep 10% of normal events
+  alwaysKeepErrors: true,        // Always keep errors
+  slowRequestThresholdMs: 2000,  // Always keep slow events
+}
+```

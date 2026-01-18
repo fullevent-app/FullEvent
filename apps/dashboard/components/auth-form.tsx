@@ -1,13 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { authClient } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 import { useFullevent } from "@fullevent/react";
 import { motion, AnimatePresence } from "motion/react";
 import { ArrowRight } from "lucide-react";
-import { checkEmailExists } from "@/app/actions/auth";
 import { GridLoader } from "@/components/ui/grid-loader";
+import { stackClientApp } from "@/stack/client";
 
 type AuthMode = "signin" | "signup";
 
@@ -30,7 +29,6 @@ export default function AuthForm({
 }: AuthFormProps) {
     const [password, setPassword] = useState("");
     const [loading, setLoading] = useState(false);
-    const [checkingEmail, setCheckingEmail] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [step, setStep] = useState(1);
     const router = useRouter();
@@ -46,49 +44,40 @@ export default function AuthForm({
 
         try {
             if (mode === "signup") {
-                await authClient.signUp.email({
+                const result = await stackClientApp.signUpWithCredential({
                     email,
                     password,
-                    name,
-                    callbackURL: "/dashboard",
-                }, {
-                    onSuccess: (ctx) => {
-                        event.set("user", {
-                            id: ctx.data?.user?.id,
-                            name: ctx.data?.user?.name,
-                            email: ctx.data?.user?.email,
-                        });
-                        event.emit();
-                        setLoading(false);
-                        router.push("/dashboard");
-                    },
-                    onError: (ctx) => {
-                        event.setError(ctx.error);
-                        event.emit();
-                        setError(ctx.error.message);
-                        setLoading(false);
-                    }
                 });
+
+                if (result.status === "error") {
+                    throw new Error(result.error.message);
+                }
+
+                event.set("user", { email });
+                event.emit();
+
+                // On successful signup, sign in automatically or redirect
+                // Usually Stack Auth returns a session, or we might need to verify email
+                // For now assuming auto-login or redirect
+                router.push("/dashboard");
             } else {
-                await authClient.signIn.email({
+                const result = await stackClientApp.signInWithCredential({
                     email,
                     password,
-                }, {
-                    onSuccess: () => {
-                        event.emit();
-                        setLoading(false);
-                        router.push("/dashboard");
-                    },
-                    onError: (ctx) => {
-                        event.setError(ctx.error);
-                        event.emit();
-                        setError(ctx.error.message);
-                        setLoading(false);
-                    }
                 });
+
+                if (result.status === "error") {
+                    throw new Error(result.error.message);
+                }
+
+                event.emit();
+                router.push("/dashboard");
             }
-        } catch {
+        } catch (err) {
+            const error = err instanceof Error ? err : new Error("Authentication failed");
+            setError(error.message);
             setLoading(false);
+            // Don't emit error event to avoid noise, or emit properly
         }
     };
 
@@ -102,20 +91,7 @@ export default function AuthForm({
                 return;
             }
 
-            setCheckingEmail(true);
-            try {
-                const exists = await checkEmailExists(email);
-                if (exists) {
-                    setError("An account with this email already exists.");
-                    return;
-                }
-                setStep(3);
-            } catch {
-                // If check fails, proceed anyway - the final signup will catch it
-                setStep(3);
-            } finally {
-                setCheckingEmail(false);
-            }
+            setStep(3);
         }
     };
 
@@ -354,17 +330,13 @@ export default function AuthForm({
                             <button
                                 type="button"
                                 onClick={handleNextStep}
-                                disabled={!email.trim() || checkingEmail}
+                                disabled={!email.trim()}
                                 className="w-full h-14 bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-cyan-300 text-black font-semibold rounded-xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 btn-glow-cyan"
                             >
-                                {checkingEmail ? (
-                                    <GridLoader size={28} color="#ffffffff" pattern="spiral" glow={true} />
-                                ) : (
-                                    <>
-                                        Continue
-                                        <ArrowRight className="h-5 w-5" />
-                                    </>
-                                )}
+                                <>
+                                    Continue
+                                    <ArrowRight className="h-5 w-5" />
+                                </>
                             </button>
                         </motion.div>
                     )}

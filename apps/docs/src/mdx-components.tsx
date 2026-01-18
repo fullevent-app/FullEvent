@@ -14,6 +14,7 @@ import {
   APIExamples,
   APIProperty,
 } from './components/api-reference';
+import { CodeShowcase, CodeFile } from './components/landing/code-showcase';
 
 export function getMDXComponents(components?: MDXComponents): MDXComponents {
   return {
@@ -32,5 +33,7 @@ export function getMDXComponents(components?: MDXComponents): MDXComponents {
     APIExamples,
     APIProperty,
     ...components,
+    CodeShowcase,
+    CodeFile,
   };
 }

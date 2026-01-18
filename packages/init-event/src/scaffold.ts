@@ -26,7 +26,7 @@ export async function scaffoldClientFile(cwd: string, apiKey: string, projectTyp
     const fileName = `fullevent.${ext}`;
     const filePath = path.join(targetDir, fileName);
 
-    const content = `import { FullEvent } from "@fullevent/node-sdk";
+    const content = `import { FullEvent } from "@fullevent/node";
 
 export const fullevent = new FullEvent({
   apiKey: "${apiKey}",

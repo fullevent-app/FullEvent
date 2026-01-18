@@ -8,9 +8,13 @@ interface LogLineLogoProps {
     animated?: boolean;
     className?: string;
     variant?: "pulse" | "stream";
+    /** Trigger a one-time pulse animation (width shrink/expand) */
+    triggerPulse?: boolean;
+    /** Auto-play the animation continuously without hover */
+    autoPlay?: boolean;
 }
 
-export function LogLineLogo({ size = 32, animated = true, className = "", variant = "pulse" }: LogLineLogoProps) {
+export function LogLineLogo({ size = 32, animated = true, className = "", variant = "pulse", triggerPulse = false, autoPlay = false }: LogLineLogoProps) {
     const [isHovered, setIsHovered] = useState(false);
 
     // Clean F shape: vertical stem + two horizontal bars
@@ -24,16 +28,17 @@ export function LogLineLogo({ size = 32, animated = true, className = "", varian
         { x: 0, y: 80, width: 35, color: "#ef4444", delay: 0.2 },
     ];
 
-    // Stream variant: continuous log stream scrolling up
+    // Stream variant: continuous log stream scrolling up on hover
+    // But uses pulse animation when triggerPulse is true
     if (variant === "stream") {
-        // Stream lines that will scroll - starts with the F shape, then continues
+        // Stream lines that will scroll - repeating F shape pattern
         const streamLines = [
-            { y: 0, width: 100, color: "#06b6d4" },   // F top (matches static)
-            { y: 40, width: 70, color: "#eab308" },   // F middle (matches static)
-            { y: 80, width: 35, color: "#ef4444" },   // F bottom (matches static)
-            { y: 120, width: 85, color: "#06b6d4" },  // incoming
-            { y: 160, width: 50, color: "#eab308" },  // incoming
-            { y: 200, width: 60, color: "#ef4444" },  // incoming
+            { y: 0, width: 100, color: "#06b6d4" },   // F top
+            { y: 40, width: 70, color: "#eab308" },   // F middle
+            { y: 80, width: 35, color: "#ef4444" },   // F bottom
+            { y: 120, width: 100, color: "#06b6d4" }, // F top (repeat)
+            { y: 160, width: 70, color: "#eab308" },  // F middle (repeat)
+            { y: 200, width: 35, color: "#ef4444" },  // F bottom (repeat)
         ];
 
         return (
@@ -51,44 +56,83 @@ export function LogLineLogo({ size = 32, animated = true, className = "", varian
                         <rect x="0" y="0" width="100" height="100" />
                     </clipPath>
                 </defs>
-                
+
                 <g clipPath="url(#logoClip)">
                     <motion.g
-                        animate={isHovered ? { y: -120 } : { y: 0 }}
+                        animate={(isHovered || autoPlay) ? { y: -120 } : { y: 0 }}
+                        initial={{ y: 0 }}
                         transition={
-                            isHovered
+                            (isHovered || autoPlay)
                                 ? {
                                     duration: 1,
                                     repeat: Infinity,
                                     ease: "linear",
-                                  }
+                                }
                                 : {
                                     duration: 0.3,
                                     ease: "easeOut",
-                                  }
+                                }
                         }
                     >
                         {streamLines.map((line, i) => (
-                            <rect
+                            <motion.rect
                                 key={`stream-${i}`}
                                 x={0}
                                 y={line.y}
-                                width={line.width}
                                 height={16}
                                 rx={8}
                                 fill={line.color}
+                                animate={
+                                    triggerPulse
+                                        ? {
+                                            width: [line.width, line.width * 0.3, line.width],
+                                            opacity: [1, 0.6, 1],
+                                        }
+                                        : { width: line.width, opacity: 1 }
+                                }
+                                transition={
+                                    triggerPulse
+                                        ? {
+                                            duration: 0.4,
+                                            delay: (i % 3) * 0.08,
+                                            ease: "easeInOut",
+                                        }
+                                        : {
+                                            duration: 0.2,
+                                            ease: "easeOut",
+                                        }
+                                }
                             />
                         ))}
                         {/* Duplicate set for seamless loop */}
                         {streamLines.map((line, i) => (
-                            <rect
+                            <motion.rect
                                 key={`stream-dup-${i}`}
                                 x={0}
                                 y={line.y + 240}
-                                width={line.width}
                                 height={16}
                                 rx={8}
                                 fill={line.color}
+                                animate={
+                                    triggerPulse
+                                        ? {
+                                            width: [line.width, line.width * 0.3, line.width],
+                                            opacity: [1, 0.6, 1],
+                                        }
+                                        : { width: line.width, opacity: 1 }
+                                }
+                                transition={
+                                    triggerPulse
+                                        ? {
+                                            duration: 0.4,
+                                            delay: (i % 3) * 0.08,
+                                            ease: "easeInOut",
+                                        }
+                                        : {
+                                            duration: 0.2,
+                                            ease: "easeOut",
+                                        }
+                                }
                             />
                         ))}
                     </motion.g>
@@ -118,25 +162,25 @@ export function LogLineLogo({ size = 32, animated = true, className = "", varian
                     fill={line.color}
                     initial={animated ? { width: 0, opacity: 0 } : { width: line.width, opacity: 1 }}
                     animate={
-                        isHovered
+                        isHovered || triggerPulse
                             ? {
                                 width: [line.width, line.width * 0.3, line.width],
                                 opacity: [1, 0.6, 1],
-                              }
+                            }
                             : { width: line.width, opacity: 1 }
                     }
                     transition={
-                        isHovered
+                        isHovered || triggerPulse
                             ? {
                                 duration: 0.4,
                                 delay: i * 0.08,
                                 ease: "easeInOut",
-                              }
+                            }
                             : {
                                 delay: animated ? line.delay : 0,
                                 duration: 0.3,
                                 ease: "easeOut",
-                              }
+                            }
                     }
                 />
             ))}

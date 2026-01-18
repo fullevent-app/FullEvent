@@ -4,7 +4,7 @@ import { logVerbose } from './util';
 
 export async function installSdk(packageManager: PackageManager, cwd: string) {
     const installCmd = packageManager === 'npm' ? 'install' : 'add';
-    const sdkPackage = process.env.FULLEVENT_SDK_VERSION || '@fullevent/node-sdk';
+    const sdkPackage = process.env.FULLEVENT_SDK_VERSION || '@fullevent/node';
     const command = `${packageManager} ${installCmd} ${sdkPackage}`;
 
     logVerbose(`Running: ${command}`);
