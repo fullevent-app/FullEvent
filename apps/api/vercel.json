@@ -3,11 +3,6 @@
     "buildCommand": "cd ../.. && pnpm build:api",
     "installCommand": "cd ../.. && pnpm install",
     "framework": null,
-    "functions": {
-        "api/**/*.ts": {
-            "runtime": "nodejs20.x"
-        }
-    },
     "rewrites": [
         {
             "source": "/(.*)",
