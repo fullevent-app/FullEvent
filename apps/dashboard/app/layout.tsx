@@ -30,6 +30,13 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "FullEvent - Don't Panic. Just Query.",
   description: "The infinite improbability event analytics platform. Ingest everything. Query anything. Towel not included.",
+  icons: {
+    icon: [
+      { url: '/fullevent_logo.png' },
+      { url: '/favicon.ico', sizes: 'any' }
+    ],
+    apple: '/fullevent_logo.png',
+  },
 };
 
 export default function RootLayout({
