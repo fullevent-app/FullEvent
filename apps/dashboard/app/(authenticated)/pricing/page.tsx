@@ -8,8 +8,8 @@ import { useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { toast } from "sonner";
 
-const STARTER_PRODUCT_ID = "8efd184b-29ce-4d37-a27a-cc9a9560f1a6";
-const PRO_PRODUCT_ID = "17c29f42-f723-4cf7-b3bd-0ce235870972";
+const STARTER_PRODUCT_ID = process.env.NEXT_PUBLIC_POLAR_STARTER_PRODUCT_ID!;
+const PRO_PRODUCT_ID = process.env.NEXT_PUBLIC_POLAR_PRO_PRODUCT_ID!;
 
 const plans = [
     {
