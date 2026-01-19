@@ -23,12 +23,33 @@ app.get('/', (c) => {
 // Temporary debug endpoint - DELETE THIS AFTER FIXING!
 app.get('/debug-env', (c) => {
     return c.json({
-        turso_url_exists: !!process.env.TURSO_DATABASE_URL,
-        turso_url_length: process.env.TURSO_DATABASE_URL?.length || 0,
-        turso_token_exists: !!process.env.TURSO_AUTH_TOKEN,
-        turso_token_length: process.env.TURSO_AUTH_TOKEN?.length || 0,
+        turso: {
+            url_exists: !!process.env.TURSO_DATABASE_URL,
+            url_length: process.env.TURSO_DATABASE_URL?.length || 0,
+            token_exists: !!process.env.TURSO_AUTH_TOKEN,
+            token_length: process.env.TURSO_AUTH_TOKEN?.length || 0,
+        },
+        clickhouse: {
+            host_exists: !!process.env.CLICKHOUSE_HOST,
+            host_length: process.env.CLICKHOUSE_HOST?.length || 0,
+            user_exists: !!process.env.CLICKHOUSE_USER,
+            password_exists: !!process.env.CLICKHOUSE_PASSWORD,
+            password_length: process.env.CLICKHOUSE_PASSWORD?.length || 0,
+            db_exists: !!process.env.CLICKHOUSE_DB,
+        },
+        stack_auth: {
+            project_id_exists: !!process.env.STACK_PROJECT_ID,
+            project_id_length: process.env.STACK_PROJECT_ID?.length || 0,
+            secret_key_exists: !!process.env.STACK_SECRET_KEY,
+            secret_key_length: process.env.STACK_SECRET_KEY?.length || 0,
+            publishable_key_exists: !!process.env.STACK_PUBLISHABLE_KEY,
+        },
         node_env: process.env.NODE_ENV,
-        all_env_keys: Object.keys(process.env).filter(k => k.includes('TURSO') || k.includes('VERCEL'))
+        all_relevant_keys: Object.keys(process.env).filter(k => 
+            k.includes('TURSO') || 
+            k.includes('CLICKHOUSE') || 
+            k.includes('STACK')
+        )
     })
 })
 
