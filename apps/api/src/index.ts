@@ -7,7 +7,7 @@ import { clickhouse, ensureTableExists } from './lib/clickhouse.js'
 import { apikey, project } from './lib/auth-schema.js'
 import { randomUUID, createHash } from 'node:crypto'
 import { eq, and } from 'drizzle-orm'
-import { stackServerApp } from './lib/stack.js'
+import { stackAuth } from './lib/stack.js'
 
 // Ensure ClickHouse table exists
 ensureTableExists().catch(console.error)
@@ -136,9 +136,9 @@ app.post('/ingest', async (c) => {
     const userId = keyRecord.userId;
     if (userId) {
         try {
-            const user = await stackServerApp.getUser(userId);
+            const user = await stackAuth.getUser(userId);
             if (user) {
-                const limits = (user.serverMetadata as { limits?: { eventsPerMonth?: number } })?.limits;
+                const limits = user.server_metadata?.limits;
                 const eventsPerMonth = limits?.eventsPerMonth ?? 1000; // Default free tier limit
 
                 const currentCount = await getMonthlyEventCount(userId);
