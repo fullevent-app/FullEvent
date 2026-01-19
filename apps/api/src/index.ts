@@ -20,6 +20,18 @@ app.get('/', (c) => {
     return c.text('Fullevent API Service')
 })
 
+// Temporary debug endpoint - DELETE THIS AFTER FIXING!
+app.get('/debug-env', (c) => {
+    return c.json({
+        turso_url_exists: !!process.env.TURSO_DATABASE_URL,
+        turso_url_length: process.env.TURSO_DATABASE_URL?.length || 0,
+        turso_token_exists: !!process.env.TURSO_AUTH_TOKEN,
+        turso_token_length: process.env.TURSO_AUTH_TOKEN?.length || 0,
+        node_env: process.env.NODE_ENV,
+        all_env_keys: Object.keys(process.env).filter(k => k.includes('TURSO') || k.includes('VERCEL'))
+    })
+})
+
 /**
  * Hash an API key using SHA-256 (same method as dashboard)
  */
@@ -239,10 +251,15 @@ app.post('/ingest', async (c) => {
     }
 })
 
-const port = 3005
-console.log(`Server is running on port ${port}`)
+// For local development
+if (process.env.NODE_ENV !== 'production') {
+    const port = 3005
+    console.log(`Server is running on port ${port}`)
+    serve({
+        fetch: app.fetch,
+        port
+    })
+}
 
-serve({
-    fetch: app.fetch,
-    port
-})
+// Export for Vercel serverless
+export default app
