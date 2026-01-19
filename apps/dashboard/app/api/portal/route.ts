@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { stackServerApp } from "@/stack/server";
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+const isProd = process.env.NODE_ENV === "production";
 
 export const GET = CustomerPortal({
     accessToken: process.env.POLAR_ACCESS_TOKEN!,
@@ -24,5 +25,5 @@ export const GET = CustomerPortal({
         return customerId;
     },
     returnUrl: appUrl,
-    server: "sandbox", // Change to "production" for live
+    server: isProd ? "production" : "sandbox",
 });
