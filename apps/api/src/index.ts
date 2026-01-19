@@ -2,12 +2,12 @@ import 'dotenv/config'
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { db } from './lib/db'
-import { clickhouse, ensureTableExists } from './lib/clickhouse'
-import { apikey, project } from './lib/auth-schema'
+import { db } from './lib/db.js'
+import { clickhouse, ensureTableExists } from './lib/clickhouse.js'
+import { apikey, project } from './lib/auth-schema.js'
 import { randomUUID, createHash } from 'node:crypto'
 import { eq, and } from 'drizzle-orm'
-import { stackServerApp } from './lib/stack'
+import { stackServerApp } from './lib/stack.js'
 
 // Ensure ClickHouse table exists
 ensureTableExists().catch(console.error)
