@@ -3,14 +3,18 @@ import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { db } from './lib/db.js'
-import { clickhouse, ensureTableExists } from './lib/clickhouse.js'
+import {
+    clickhouse as clickhouseV2,
+    ensureSchemaV2,
+    ingestWideEvent
+} from './lib/clickhouse-v2.js'
 import { apikey, project } from './lib/auth-schema.js'
 import { randomUUID, createHash } from 'node:crypto'
 import { eq, and } from 'drizzle-orm'
 import { stackAuth } from './lib/stack.js'
 
-// Ensure ClickHouse table exists
-ensureTableExists().catch(console.error)
+// V2 schema is now the default
+ensureSchemaV2().catch(console.error)
 
 const app = new Hono()
 
@@ -20,36 +24,21 @@ app.get('/', (c) => {
     return c.text('Fullevent API Service')
 })
 
-// Temporary debug endpoint - DELETE THIS AFTER FIXING!
+// Debug endpoint for env verification
 app.get('/debug-env', (c) => {
     return c.json({
+        schema_version: 'v2',
         turso: {
             url_exists: !!process.env.TURSO_DATABASE_URL,
-            url_length: process.env.TURSO_DATABASE_URL?.length || 0,
             token_exists: !!process.env.TURSO_AUTH_TOKEN,
-            token_length: process.env.TURSO_AUTH_TOKEN?.length || 0,
         },
         clickhouse: {
             host_exists: !!process.env.CLICKHOUSE_HOST,
-            host_length: process.env.CLICKHOUSE_HOST?.length || 0,
             user_exists: !!process.env.CLICKHOUSE_USER,
             password_exists: !!process.env.CLICKHOUSE_PASSWORD,
-            password_length: process.env.CLICKHOUSE_PASSWORD?.length || 0,
             db_exists: !!process.env.CLICKHOUSE_DB,
         },
-        stack_auth: {
-            project_id_exists: !!process.env.STACK_PROJECT_ID,
-            project_id_length: process.env.STACK_PROJECT_ID?.length || 0,
-            secret_key_exists: !!process.env.STACK_SECRET_KEY,
-            secret_key_length: process.env.STACK_SECRET_KEY?.length || 0,
-            publishable_key_exists: !!process.env.STACK_PUBLISHABLE_KEY,
-        },
         node_env: process.env.NODE_ENV,
-        all_relevant_keys: Object.keys(process.env).filter(k => 
-            k.includes('TURSO') || 
-            k.includes('CLICKHOUSE') || 
-            k.includes('STACK')
-        )
     })
 })
 
@@ -61,7 +50,7 @@ function hashApiKey(key: string): string {
 }
 
 /**
- * Get monthly event count for a user
+ * Get monthly event count for a user (using V2 daily_usage_v2 table)
  */
 async function getMonthlyEventCount(userId: string): Promise<number> {
     const startOfMonth = new Date();
@@ -69,7 +58,6 @@ async function getMonthlyEventCount(userId: string): Promise<number> {
     startOfMonth.setHours(0, 0, 0, 0);
 
     // Get user's projects from Turso (sqlite) first
-    // We cannot join between ClickHouse and Sqlite directly
     const userProjects = await db.select({ id: project.id })
         .from(project)
         .where(eq(project.userId, userId));
@@ -79,17 +67,18 @@ async function getMonthlyEventCount(userId: string): Promise<number> {
     }
 
     const projectIds = userProjects.map(p => p.id);
+    const startOfMonthStr = startOfMonth.toISOString().split('T')[0];
 
-    const result = await clickhouse.query({
+    const result = await clickhouseV2.query({
         query: `
-            SELECT count() as count 
-            FROM event_log 
+            SELECT sum(count) as count 
+            FROM daily_usage_v2 
             WHERE project_id IN ({projectIds:Array(String)})
-            AND timestamp >= {startOfMonth:DateTime}
+            AND day >= {startOfMonth:Date}
         `,
         query_params: {
             projectIds,
-            startOfMonth: Math.floor(startOfMonth.getTime() / 1000)
+            startOfMonth: startOfMonthStr
         },
         format: 'JSONEachRow'
     });
@@ -196,15 +185,15 @@ app.post('/ingest', async (c) => {
 
     const body = await c.req.json()
 
-    // Check for duplicate ping
+    // Check for duplicate ping (V2 schema)
     // We only allow one "fullevent.ping" event per project to prevent log pollution
     if (body.event === 'fullevent.ping' && projectId) {
-        const result = await clickhouse.query({
+        const result = await clickhouseV2.query({
             query: `
                 SELECT 1 
-                FROM event_log 
-                WHERE project_id = {projectId:String} 
-                AND type = 'fullevent.ping' 
+                FROM events 
+                WHERE _project_id = {projectId:String} 
+                AND _event_type = 'fullevent.ping' 
                 LIMIT 1
             `,
             query_params: {
@@ -250,21 +239,25 @@ app.post('/ingest', async (c) => {
     const outcome = typeof userProperties.outcome === 'string' ? userProperties.outcome : null;
 
     try {
-        await clickhouse.insert({
-            table: 'event_log',
-            values: [{
-                id: eventId,
+        // V2: TRUE WIDE EVENTS - User properties become queryable columns
+        // The user's event IS the schema - no transformation needed
+        // ClickHouse JSON column automatically creates typed sub-columns
+        await ingestWideEvent(projectId, body.event || 'unknown', {
+            // FullEvent metadata (nested to avoid polluting user namespace)
+            fullevent: {
+                event_id: eventId,
+                event_type: body.event,
                 project_id: projectId,
-                type: body.event || 'unknown',
-                payload: JSON.stringify(wideEvent),
-                timestamp: Math.floor(new Date(timestamp).getTime() / 1000), // ClickHouse DateTime expects unix timestamp in seconds or string
-                status_code: statusCode,
-                outcome,
-            }],
-            format: 'JSONEachRow'
+                timestamp: timestamp,
+                ingested_at: new Date().toISOString(),
+            },
+            // Include trace for correlation
+            trace_id: userProperties.trace_id || randomUUID(),
+            // Spread ALL user properties - they become queryable columns!
+            ...userProperties,
         })
 
-        console.log(`Ingested event for project ${projectId}:`, body.event)
+        console.log(`Ingested wide event for project ${projectId}:`, body.event)
         return c.json({ success: true })
     } catch (err) {
         console.error('Failed to persist event log:', err);
