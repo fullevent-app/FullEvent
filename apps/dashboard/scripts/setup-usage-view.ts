@@ -1,83 +1,93 @@
 import { config } from 'dotenv';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Resolve relative to the script location (in apps/dashboard/scripts)
+const dashboardRoot = path.resolve(__dirname, '..');
+const apiRoot = path.resolve(__dirname, '../../api');
+
+// Try loading from .env.local first
+const envLocalPath = path.resolve(dashboardRoot, '.env.local');
+console.log(`Loading env from: ${envLocalPath}`);
+config({ path: envLocalPath });
 
 // Try loading from api env
-const apiEnvPath = path.resolve(process.cwd(), '../api/.env');
+const apiEnvPath = path.resolve(apiRoot, '.env');
 console.log(`Loading env from: ${apiEnvPath}`);
 config({ path: apiEnvPath });
 config(); // Fallback
 
 async function main() {
     // Dynamic import to ensure env vars are loaded first
-    const { clickhouse } = await import('../lib/clickhouse');
+    const { clickhouse } = await import('../lib/clickhouse.ts');
 
-    console.log('Running usage view setup (Daily Aggregation)...');
+    console.log('🚀 Running usage view setup for V2 schema (Wide Events)...');
 
     try {
-        // CLEANUP: Drop old monthly views if they exist
-        console.log("Dropping old monthly tables...");
-        await clickhouse.query({ query: "DROP VIEW IF EXISTS monthly_usage_mv" });
-        await clickhouse.query({ query: "DROP TABLE IF EXISTS monthly_usage" });
-
-        // 1. Create Daily Aggregation Table
-        await clickhouse.query({
+        // Create daily usage aggregation table
+        await clickhouse.command({
             query: `
-                CREATE TABLE IF NOT EXISTS daily_usage (
-                    project_id String,
-                    day Date,
-                    count UInt64
-                ) ENGINE = SummingMergeTree()
-                ORDER BY (project_id, day)
-            `
+            CREATE TABLE IF NOT EXISTS daily_usage (
+                project_id String,
+                day Date,
+                count SimpleAggregateFunction(sum, UInt64)
+            ) ENGINE = AggregatingMergeTree()
+            PARTITION BY toYYYYMM(day)
+            ORDER BY (project_id, day)
+        `
         });
-        console.log("Created table 'daily_usage'");
+        console.log("✅ Created table 'daily_usage'");
 
-        // 2. Create Materialized View
-        await clickhouse.query({
+        // Create materialized view to populate it
+        await clickhouse.command({
             query: `
-                CREATE MATERIALIZED VIEW IF NOT EXISTS daily_usage_mv TO daily_usage AS
-                SELECT 
-                    project_id,
-                    toStartOfDay(timestamp) as day,
-                    count() as count
-                FROM event_log
-                GROUP BY project_id, day
-            `
+            CREATE MATERIALIZED VIEW IF NOT EXISTS daily_usage_mv TO daily_usage AS
+            SELECT 
+                _project_id as project_id,
+                toDate(_timestamp) as day,
+                count() as count
+            FROM events
+            GROUP BY _project_id, day
+        `
         });
-        console.log("Created materialized view 'daily_usage_mv'");
+        console.log("✅ Created materialized view 'daily_usage_mv'");
 
-        // 3. Check for data and populate if empty
+        // Check if we need to backfill
         const result = await clickhouse.query({
-            query: "SELECT count() as count FROM daily_usage",
+            query: `SELECT count() as count FROM daily_usage`,
             format: 'JSONEachRow'
         });
         const rows = await result.json() as { count: string }[];
-        const count = parseInt(rows[0]?.count || '0');
+        const rowCount = parseInt(rows[0]?.count || '0');
 
-        if (count === 0) {
-            console.log("Populating daily_usage from existing event_log...");
-            // Backfill
-            await clickhouse.query({
+        if (rowCount > 0) {
+            console.log(`📊 daily_usage already has ${rowCount} rows, skipping backfill.`);
+        } else {
+            console.log('🔄 Backfilling daily_usage...');
+            // Backfill from V2 events table
+            await clickhouse.command({
                 query: `
                     INSERT INTO daily_usage
                     SELECT 
-                        project_id,
-                        toStartOfDay(timestamp) as day,
+                        _project_id as project_id,
+                        toDate(_timestamp) as day,
                         count() as count
-                    FROM event_log
-                    GROUP BY project_id, day
+                    FROM events
+                    GROUP BY _project_id, day
                 `
             });
-            console.log("Backfill complete.");
-        } else {
-            console.log("daily_usage already has data, skipping backfill.");
+            console.log("✅ Backfill complete.");
         }
 
         await clickhouse.close();
-        console.log("Done.");
+        console.log("✅ Done.");
 
     } catch (e) {
-        console.error("Error setting up usage view:", e);
+        console.error("❌ Error setting up usage view:", e);
+        process.exit(1);
     }
 }
 
