@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, use, useCallback, useRef } from "react";
-import { getProjects, getProjectEvents, trackLogsView, getProjectSearchSuggestions, getProjectStats } from "@/app/actions/projects";
+import { initLogsPage, getProjectEvents, getProjectStats, getRelatedEventsByTraceId } from "@/app/actions/projects";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { RefreshCcw, Terminal, ArrowLeft } from "lucide-react";
@@ -82,6 +82,9 @@ export default function ProjectLogsPage({ params }: PageProps) {
     const eventsRef = useRef<EventLog[]>([]);
     const observerTarget = useRef(null);
 
+    // Prefetch cache for related events (hover prefetching)
+    const prefetchCacheRef = useRef<Map<string, { data: unknown[]; pending: boolean }>>(new Map());
+
     const LIMIT = 100;
 
     const loadStats = useCallback(async (params: Record<string, unknown> = {}) => {
@@ -137,20 +140,24 @@ export default function ProjectLogsPage({ params }: PageProps) {
 
     useEffect(() => {
         const init = async () => {
-            await loadProject();
-            await loadEvents({}, false);
-            await loadStats({});
-            await trackLogsView(projectId);
-            // Load dynamic search suggestions from actual log data
-            try {
-                const suggestions = await getProjectSearchSuggestions(projectId);
-                setSearchSuggestions(suggestions);
-            } catch (err) {
-                console.error("Failed to load search suggestions:", err);
+            const result = await initLogsPage(projectId, { limit: LIMIT, offset: 0 });
+
+            if ('error' in result) {
+                toast.error(result.error);
+                return;
             }
+
+            setProject(result.project);
+            setEvents(result.events);
+            eventsRef.current = result.events;
+            setStats(result.stats as ProjectStats);
+            setSearchSuggestions(result.suggestions as SearchSuggestions);
+            setHasMore(result.hasMore);
+            setLoading(false);
+            setEventsLoading(false);
+            setStatsLoading(false);
         };
         init();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [projectId]);
 
     // Infinite scroll observer
@@ -176,22 +183,7 @@ export default function ProjectLogsPage({ params }: PageProps) {
         };
     }, [hasMore, eventsLoading, loadEvents]);
 
-    const loadProject = async () => {
-        try {
-            const projects = await getProjects() as Project[];
-            const p = projects.find((p) => p.id === projectId);
-            if (p) {
-                setProject(p);
-            } else {
-                toast.error("Project not found");
-            }
-        } catch (error) {
-            console.error(error);
-            toast.error("Failed to load project details");
-        } finally {
-            setLoading(false);
-        }
-    };
+
 
     const handleSearch = useCallback((raw: string, parsed: ParsedQuery) => {
         // Only search if there are actual filter values or search text
@@ -337,11 +329,34 @@ export default function ProjectLogsPage({ params }: PageProps) {
                                             ? <span className="text-muted-foreground">{`{ ${payloadPreviewKeys}${remainingKeys.length > 3 ? '...' : ''} }`}</span>
                                             : <span className="text-muted-foreground opacity-50">{"{}"}</span>;
 
+                                        // Prefetch related events on hover
+                                        const handleMouseEnter = () => {
+                                            const traceId = (props.trace_id || props.request_id) as string | undefined;
+                                            if (!traceId) return;
+
+                                            const cacheKey = `${e.id}:${traceId}`;
+                                            if (prefetchCacheRef.current.has(cacheKey)) return;
+
+                                            // Mark as pending to avoid duplicate requests
+                                            prefetchCacheRef.current.set(cacheKey, { data: [], pending: true });
+
+                                            console.log('[DEBUG] Hover prefetch triggered for:', e.id);
+                                            // Prefetch in background
+                                            getRelatedEventsByTraceId(projectId, e.id, traceId)
+                                                .then(data => {
+                                                    prefetchCacheRef.current.set(cacheKey, { data, pending: false });
+                                                })
+                                                .catch(() => {
+                                                    prefetchCacheRef.current.delete(cacheKey);
+                                                });
+                                        };
+
                                         return (
                                             <div
                                                 key={e.id}
                                                 className={`flex px-4 py-2 hover:bg-muted/30 transition-colors cursor-pointer group items-center ${selectedLog?.id === e.id ? 'bg-muted/50' : ''}`}
                                                 onClick={() => setSelectedLog(e)}
+                                                onMouseEnter={handleMouseEnter}
                                             >
                                                 {selectedColumns.map(colKey => {
                                                     const def = COLUMN_DEFS[colKey] || { label: colKey, width: "w-[150px]" };
@@ -416,6 +431,7 @@ export default function ProjectLogsPage({ params }: PageProps) {
                         open={!!selectedLog}
                         onClose={() => setSelectedLog(null)}
                         onSelectRelated={(relatedEvent) => setSelectedLog(relatedEvent)}
+                        prefetchCache={prefetchCacheRef.current}
                     />
                 )}
             </div>

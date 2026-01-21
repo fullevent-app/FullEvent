@@ -104,8 +104,17 @@ export function LogSearchInput({ onSearch, isLoading, dynamicSuggestions }: LogS
         return availableKeys;
     }, [inputValue, activeKey, getValuesForKey, availableKeys]);
 
+    // Track if this is the initial mount to skip first search trigger
+    const isInitialMount = React.useRef(true);
+
     // Trigger search when filters change (only complete filters)
     React.useEffect(() => {
+        // Skip the initial mount to avoid duplicate calls
+        if (isInitialMount.current) {
+            isInitialMount.current = false;
+            return;
+        }
+
         const timeout = setTimeout(() => {
             const parsed: ParsedQuery = { search: "" };
 
@@ -158,7 +167,9 @@ export function LogSearchInput({ onSearch, isLoading, dynamicSuggestions }: LogS
         // Handle colon - activates key mode
         if (e.key === ":" && !activeKey && inputValue.trim()) {
             const potentialKey = inputValue.trim().toLowerCase();
-            if (availableKeys.includes(potentialKey)) {
+            // Allow any valid key format: alphanumeric with dots for nested fields (e.g., cart.id)
+            const isValidKey = /^[a-z][a-z0-9_.]*$/i.test(potentialKey);
+            if (isValidKey) {
                 setActiveKey(potentialKey);
                 setInputValue("");
                 setOpen(true);
@@ -328,6 +339,11 @@ export function LogSearchInput({ onSearch, isLoading, dynamicSuggestions }: LogS
                     {currentSuggestions.map((s, idx) => (
                         <button
                             key={s}
+                            ref={(el) => {
+                                if (idx === selectedIndex) {
+                                    el?.scrollIntoView({ block: "nearest" });
+                                }
+                            }}
                             onClick={() => selectSuggestion(s)}
                             onMouseEnter={() => setSelectedIndex(idx)} // Mouse sync
                             className={cn(

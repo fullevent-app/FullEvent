@@ -86,7 +86,7 @@ export async function getMonthlyEventCount() {
     const result = await clickhouse.query({
         query: `
             SELECT sum(count) as count 
-            FROM daily_usage 
+            FROM daily_usage_v2 
             WHERE project_id IN ({projectIds:Array(String)})
             AND day >= {startPeriod:Date}
         `,
@@ -143,6 +143,180 @@ export async function getProject(projectId: string) {
         )
     );
     return p;
+}
+
+/**
+ * Consolidated init function for the logs page.
+ * Fetches all required data in a single server action to minimize network requests.
+ */
+export async function initLogsPage(projectId: string, options?: {
+    limit?: number;
+    offset?: number;
+}) {
+    const limit = options?.limit ?? 100;
+    const offset = options?.offset ?? 0;
+
+    const stackUser = await getCurrentUser();
+
+    // Verify user owns the project and get project details
+    const [p] = await db.select().from(project).where(
+        and(
+            eq(project.id, projectId),
+            eq(project.userId, stackUser.id),
+            isNull(project.deletedAt)
+        )
+    );
+
+    if (!p) {
+        return { error: "Project not found or unauthorized" };
+    }
+
+    // Fetch everything else in parallel
+    const [events, stats, suggestions] = await Promise.all([
+        // Events query (simplified from getProjectEvents)
+        clickhouse.query({
+            query: `
+                SELECT _id as id, _project_id as projectId, _event_type as type, 
+                       toString(event) as payload, _timestamp as timestamp,
+                       event.status_code as statusCode, event.outcome as outcome
+                FROM events
+                WHERE _project_id = {projectId:String}
+                ORDER BY _timestamp DESC
+                LIMIT {limit:UInt32}
+                OFFSET {offset:UInt32}
+            `,
+            query_params: { projectId, limit, offset },
+            format: 'JSONEachRow'
+        }).then(r => r.json() as Promise<Array<{
+            id: string;
+            projectId: string;
+            type: string;
+            payload: string;
+            timestamp: string;
+            statusCode?: number | null;
+            outcome?: string | null;
+        }>>).then(rows => rows.map(e => ({
+            ...e,
+            timestamp: new Date(e.timestamp)
+        }))),
+
+        // Stats query (simplified from getProjectStats)
+        clickhouse.query({
+            query: `
+                SELECT 
+                    count() as total_events,
+                    countIf(event.status_code >= 500 OR event.outcome = 'error') as error_count,
+                    countIf(event.status_code >= 200 AND event.status_code < 400) as success_count,
+                    avg(CAST(event.duration_ms, 'Nullable(Float64)')) as avg_duration
+                FROM events
+                WHERE _project_id = {projectId:String}
+                AND _timestamp >= now() - INTERVAL 24 HOUR
+            `,
+            query_params: { projectId },
+            format: 'JSONEachRow'
+        }).then(r => r.json() as Promise<Array<{
+            total_events: string;
+            error_count: string;
+            success_count: string;
+            avg_duration: string | null;
+        }>>).then(rows => {
+            const row = rows[0];
+            const total = parseInt(row?.total_events) || 0;
+            const errors = parseInt(row?.error_count) || 0;
+            const success = parseInt(row?.success_count) || 0;
+            return {
+                total,
+                errors,
+                errorRate: total > 0 ? (errors / total) * 100 : 0,
+                successRate: total > 0 ? (success / total) * 100 : 0
+            };
+        }),
+
+        // Search suggestions - full dynamic field discovery by parsing payloads
+        clickhouse.query({
+            query: `
+                SELECT _event_type as type, event.status_code as statusCode, 
+                       event.outcome as outcome, toString(event) as payload
+                FROM events
+                WHERE _project_id = {projectId:String}
+                ORDER BY _timestamp DESC
+                LIMIT 500
+            `,
+            query_params: { projectId },
+            format: 'JSONEachRow'
+        }).then(r => r.json() as Promise<Array<{
+            type: string;
+            statusCode: number | null;
+            outcome: string | null;
+            payload: string;
+        }>>).then(recentEvents => {
+            // Dynamic field discovery: key -> Set of values
+            const fieldValues: Record<string, Set<string>> = {};
+            const eventTypes = new Set<string>();
+
+            // Helper to add a value to a field
+            const addFieldValue = (key: string, value: unknown) => {
+                if (value === null || value === undefined) return;
+                if (typeof value === 'object') return;
+                const strValue = String(value);
+                if (strValue.length > 50) return; // Skip long values
+                if (!fieldValues[key]) fieldValues[key] = new Set();
+                fieldValues[key].add(strValue);
+            };
+
+            recentEvents.forEach(event => {
+                if (event.type) eventTypes.add(event.type);
+                if (event.statusCode) addFieldValue('status_code', event.statusCode);
+                if (event.outcome) addFieldValue('outcome', event.outcome);
+
+                // Parse JSON payload to discover ALL nested keys
+                try {
+                    const parsed = JSON.parse(event.payload);
+                    const processValue = (prefix: string, value: unknown) => {
+                        if (value === null || value === undefined) return;
+                        if (typeof value === 'object' && !Array.isArray(value)) {
+                            Object.entries(value).forEach(([k, v]) => {
+                                processValue(prefix ? `${prefix}.${k}` : k, v);
+                            });
+                        } else {
+                            addFieldValue(prefix, value);
+                        }
+                    };
+                    Object.entries(parsed || {}).forEach(([key, value]) => {
+                        processValue(key, value);
+                    });
+                } catch { /* Ignore parse errors */ }
+            });
+
+            // Convert Sets to arrays
+            const fields: Record<string, string[]> = {};
+            Object.entries(fieldValues).forEach(([key, valueSet]) => {
+                const values = Array.from(valueSet);
+                const numericValues = values.filter(v => !isNaN(Number(v))).sort((a, b) => Number(a) - Number(b));
+                const stringValues = values.filter(v => isNaN(Number(v))).sort();
+                fields[key] = [...numericValues, ...stringValues].slice(0, 25);
+            });
+
+            return {
+                eventTypes: Array.from(eventTypes).slice(0, 30),
+                fields
+            };
+        }).catch(() => ({ eventTypes: [], fields: {} }))
+    ]);
+
+    // Fire trackLogsView in background (don't await)
+    fullEvent.ingest("logs.view", {
+        projectId,
+        userId: stackUser.id
+    }).catch(() => { });
+
+    return {
+        project: p,
+        events,
+        stats,
+        suggestions,
+        hasMore: events.length >= limit
+    };
 }
 
 export async function createProjectKey(projectId: string, traceId?: string) {
@@ -277,10 +451,11 @@ export async function getProjectEvents(
     }
 
     const queryParams: Record<string, string | number> = { projectId };
-    let whereClause = "project_id = {projectId:String}";
+    let whereClause = "_project_id = {projectId:String}";
 
     if (options?.search) {
-        whereClause += " AND payload ILIKE {search:String}";
+        // V2: Search in the JSON event column using toString for full-text search
+        whereClause += " AND toString(event) ILIKE {search:String}";
         queryParams.search = `%${options.search}%`;
     }
 
@@ -292,41 +467,49 @@ export async function getProjectEvents(
         if (key === 'status') {
             const statusVal = String(value);
             if (statusVal === "error") {
-                whereClause += " AND (status_code >= 400 OR outcome = 'error' OR JSONExtractString(payload, 'status_code') ILIKE '5%')";
+                // V2: Access JSON columns directly with event.field syntax
+                whereClause += " AND (event.status_code >= 400 OR event.outcome = 'error')";
             } else if (statusVal === "success") {
-                whereClause += " AND ((status_code >= 200 AND status_code < 400) OR outcome = 'success')";
+                whereClause += " AND ((event.status_code >= 200 AND event.status_code < 400) OR event.outcome = 'success')";
             } else {
                 const numVal = parseInt(statusVal, 10);
                 if (!isNaN(numVal)) {
-                    whereClause += ` AND (status_code = ${numVal} OR JSONExtractString(payload, 'status_code') ILIKE '%${statusVal}%')`;
+                    whereClause += ` AND event.status_code = ${numVal}`;
                 } else {
-                    whereClause += ` AND JSONExtractString(payload, 'status_code') ILIKE '%${statusVal}%'`;
+                    whereClause += ` AND toString(event.status_code) ILIKE '%${statusVal}%'`;
                 }
+            }
+            return;
+        }
+
+        if (key === 'status_code') {
+            const statusVal = String(value);
+            const numVal = parseInt(statusVal, 10);
+            if (!isNaN(numVal)) {
+                whereClause += ` AND event.status_code = ${numVal}`;
+            } else {
+                whereClause += ` AND toString(event.status_code) ILIKE '%${statusVal}%'`;
             }
             return;
         }
 
         if (key === 'outcome') {
             const outcomeVal = String(value);
-            whereClause += ` AND (outcome = '${outcomeVal}' OR JSONExtractString(payload, 'outcome') ILIKE '%${outcomeVal}%')`;
+            whereClause += ` AND event.outcome = '${outcomeVal}'`;
             return;
         }
 
         if (key === 'type') {
-            whereClause += " AND type = {type:String}";
+            whereClause += " AND _event_type = {type:String}";
             queryParams.type = String(value);
             return;
         }
 
-        // Generic JSON extraction filter
+        // V2: Generic filter using dot notation on JSON column
         if (!/^[a-zA-Z0-9_.]+$/.test(key)) return;
-        const parts = key.split('.');
-        // Use JSONExtractString for safe extraction. ClickHouse JSON functions are versatile.
-        // Assuming payload is a JSON string.
-        // For deep paths, we can use JSONExtractString(payload, 'part1', 'part2')
-        const jsonPathArgs = parts.map(p => `'${p}'`).join(', ');
         const paramKey = key.replace(/\./g, '_');
-        whereClause += ` AND JSONExtractString(payload, ${jsonPathArgs}) ILIKE {${paramKey}:String}`;
+        // Access nested JSON fields directly: event.field.subfield
+        whereClause += ` AND toString(event.${key}) ILIKE {${paramKey}:String}`;
         queryParams[paramKey] = `%${String(value)}%`;
     });
 
@@ -335,16 +518,16 @@ export async function getProjectEvents(
 
     const query = `
         SELECT 
-            id, 
-            project_id as projectId,
-            type, 
-            payload, 
-            timestamp, 
-            status_code as statusCode, 
-            outcome 
-        FROM event_log
+            _id as id, 
+            _project_id as projectId,
+            _event_type as type, 
+            toString(event) as payload, 
+            _timestamp as timestamp, 
+            event.status_code as statusCode, 
+            event.outcome as outcome 
+        FROM events
         WHERE ${whereClause}
-        ORDER BY timestamp DESC
+        ORDER BY _timestamp DESC
         LIMIT {limit:Int32} OFFSET {offset:Int32}
     `;
 
@@ -483,13 +666,13 @@ export async function getProjectSearchSuggestions(projectId: string) {
         throw new Error("Project not found or unauthorized");
     }
 
-    // Get recent events from ClickHouse
+    // Get recent events from ClickHouse (V2 schema)
     const result = await clickhouse.query({
         query: `
-            SELECT type, status_code as statusCode, outcome, payload
-            FROM event_log
-            WHERE project_id = {projectId:String}
-            ORDER BY timestamp DESC
+            SELECT _event_type as type, event.status_code as statusCode, event.outcome as outcome, toString(event) as payload
+            FROM events
+            WHERE _project_id = {projectId:String}
+            ORDER BY _timestamp DESC
             LIMIT 500
         `,
         query_params: { projectId },
@@ -612,10 +795,10 @@ export async function getProjectStats(
     }
 
     const queryParams: Record<string, string | number> = { projectId };
-    let whereClause = "project_id = {projectId:String}";
+    let whereClause = "_project_id = {projectId:String}";
 
     if (options?.search) {
-        whereClause += " AND payload ILIKE {search:String}";
+        whereClause += " AND toString(event) ILIKE {search:String}";
         queryParams.search = `%${options.search}%`;
     }
 
@@ -625,15 +808,15 @@ export async function getProjectStats(
             if (key === 'status') {
                 const statusVal = String(value);
                 if (statusVal === "error") {
-                    whereClause += " AND (status_code >= 400 OR outcome = 'error' OR JSONExtractString(payload, 'status_code') ILIKE '5%')";
+                    whereClause += " AND (event.status_code >= 400 OR event.outcome = 'error')";
                 } else if (statusVal === "success") {
-                    whereClause += " AND ((status_code >= 200 AND status_code < 400) OR outcome = 'success')";
+                    whereClause += " AND ((event.status_code >= 200 AND event.status_code < 400) OR event.outcome = 'success')";
                 } else {
                     const numVal = parseInt(statusVal, 10);
                     if (!isNaN(numVal)) {
-                        whereClause += ` AND (status_code = ${numVal} OR JSONExtractString(payload, 'status_code') ILIKE '%${statusVal}%')`;
+                        whereClause += ` AND event.status_code = ${numVal}`;
                     } else {
-                        whereClause += ` AND JSONExtractString(payload, 'status_code') ILIKE '%${statusVal}%'`;
+                        whereClause += ` AND toString(event.status_code) ILIKE '%${statusVal}%'`;
                     }
                 }
                 return;
@@ -641,29 +824,26 @@ export async function getProjectStats(
 
             if (key === 'outcome') {
                 const outcomeVal = String(value);
-                whereClause += ` AND (outcome = '${outcomeVal}' OR JSONExtractString(payload, 'outcome') ILIKE '%${outcomeVal}%')`;
+                whereClause += ` AND event.outcome = '${outcomeVal}'`;
                 return;
             }
 
             if (key === 'type') {
-                whereClause += " AND type = {type:String}";
+                whereClause += " AND _event_type = {type:String}";
                 queryParams.type = String(value);
                 return;
             }
 
             if (!/^[a-zA-Z0-9_.]+$/.test(key)) return;
-            // JSON extraction logic
-            const parts = key.split('.');
-            const jsonPathArgs = parts.map(p => `'${p}'`).join(', ');
             const paramKey = key.replace(/\./g, '_');
-            whereClause += ` AND JSONExtractString(payload, ${jsonPathArgs}) ILIKE {${paramKey}:String}`;
+            whereClause += ` AND toString(event.${key}) ILIKE {${paramKey}:String}`;
             queryParams[paramKey] = `%${String(value)}%`;
         });
     }
 
     const countQuery = `
         SELECT count() as count 
-        FROM event_log 
+        FROM events 
         WHERE ${whereClause}
     `;
 
@@ -678,13 +858,11 @@ export async function getProjectStats(
     const totalRows = await totalResult.json() as { count: string }[];
     const total = Number(totalRows[0]?.count || 0);
 
-    // Error count query
-    // In ClickHouse, we can just aggregate with a conditional case in one query ideally,
-    // but sticking to structure, let's just run a separate count for errors.
-    const errorWhere = whereClause + " AND (status_code >= 400 OR outcome = 'error' OR JSONExtractString(payload, 'status_code') ILIKE '4%' OR JSONExtractString(payload, 'status_code') ILIKE '5%' OR JSONExtractString(payload, 'outcome') = 'error')";
+    // Error count query (V2 schema)
+    const errorWhere = whereClause + " AND (event.status_code >= 400 OR event.outcome = 'error')";
 
     const errorResult = await clickhouse.query({
-        query: `SELECT count() as count FROM event_log WHERE ${errorWhere}`,
+        query: `SELECT count() as count FROM events WHERE ${errorWhere}`,
         query_params: queryParams,
         format: 'JSONEachRow'
     });
@@ -716,32 +894,35 @@ export async function getRelatedEventsByTraceId(
     statusCode?: number | null;
     outcome?: string | null;
 }[]> {
-    const stackUser = await getCurrentUser();
+    const startTotal = performance.now();
+
+    // Run auth and project lookup in parallel
+    const startParallel = performance.now();
+    const [stackUser, projectResult] = await Promise.all([
+        getCurrentUser(),
+        db.select().from(project).where(eq(project.id, projectId))
+    ]);
+    console.log(`[TIMING] parallel (auth + project lookup): ${(performance.now() - startParallel).toFixed(0)}ms`);
+
+    const [p] = projectResult;
 
     // Verify user owns the project
-    const [p] = await db.select().from(project).where(
-        and(
-            eq(project.id, projectId),
-            eq(project.userId, stackUser.id)
-        )
-    );
-
-    if (!p) {
+    if (!p || p.userId !== stackUser.id) {
         throw new Error("Project not found or unauthorized");
     }
 
-    // Search for events with same trace_id in the payload
-    // Search both trace_id and request_id fields
+    // Search for events with same trace_id in the event JSON (V2 schema)
+    const startClickhouse = performance.now();
     const result = await clickhouse.query({
         query: `
-            SELECT id, type, timestamp, payload, status_code as statusCode, outcome
-            FROM event_log
-            WHERE project_id = {projectId:String}
+            SELECT _id as id, _event_type as type, _timestamp as timestamp, toString(event) as payload, event.status_code as statusCode, event.outcome as outcome
+            FROM events
+            WHERE _project_id = {projectId:String}
             AND (
-                JSONExtractString(payload, 'trace_id') = {traceId:String} 
-                OR JSONExtractString(payload, 'request_id') = {traceId:String}
+                event.trace_id = {traceId:String} 
+                OR event.request_id = {traceId:String}
             )
-            ORDER BY timestamp DESC
+            ORDER BY _timestamp DESC
             LIMIT 20
         `,
         query_params: {
@@ -750,6 +931,7 @@ export async function getRelatedEventsByTraceId(
         },
         format: 'JSONEachRow'
     });
+    console.log(`[TIMING] clickhouse.query: ${(performance.now() - startClickhouse).toFixed(0)}ms`);
 
     const relatedEvents = await result.json() as {
         id: string;
@@ -759,6 +941,8 @@ export async function getRelatedEventsByTraceId(
         statusCode: number | null;
         outcome: string | null;
     }[];
+
+    console.log(`[TIMING] TOTAL getRelatedEventsByTraceId: ${(performance.now() - startTotal).toFixed(0)}ms`);
 
     // Filter out the current event
     return relatedEvents
@@ -866,14 +1050,14 @@ export async function checkForTestEvent(projectId: string) {
         throw new Error("Project not found or unauthorized");
     }
 
-    // Check for ping events in this project
+    // Check for ping events in this project (V2 schema)
     const result = await clickhouse.query({
         query: `
-            SELECT id, type, payload, timestamp
-            FROM event_log
-            WHERE project_id = {projectId:String}
-            AND type = 'fullevent.ping'
-            ORDER BY timestamp DESC
+            SELECT _id as id, _event_type as type, toString(event) as payload, _timestamp as timestamp
+            FROM events
+            WHERE _project_id = {projectId:String}
+            AND _event_type = 'fullevent.ping'
+            ORDER BY _timestamp DESC
             LIMIT 1
         `,
         query_params: { projectId },
