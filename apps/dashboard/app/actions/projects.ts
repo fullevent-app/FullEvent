@@ -86,7 +86,7 @@ export async function getMonthlyEventCount() {
     const result = await clickhouse.query({
         query: `
             SELECT sum(count) as count 
-            FROM daily_usage_v2 
+            FROM daily_usage
             WHERE project_id IN ({projectIds:Array(String)})
             AND day >= {startPeriod:Date}
         `,
@@ -474,9 +474,11 @@ export async function getProjectEvents(
             } else {
                 const numVal = parseInt(statusVal, 10);
                 if (!isNaN(numVal)) {
-                    whereClause += ` AND event.status_code = ${numVal}`;
+                    whereClause += " AND event.status_code = {statusNumFilter:Int32}";
+                    queryParams.statusNumFilter = numVal;
                 } else {
-                    whereClause += ` AND toString(event.status_code) ILIKE '%${statusVal}%'`;
+                    whereClause += " AND toString(event.status_code) ILIKE {statusStrFilter:String}";
+                    queryParams.statusStrFilter = `%${statusVal}%`;
                 }
             }
             return;
@@ -486,16 +488,18 @@ export async function getProjectEvents(
             const statusVal = String(value);
             const numVal = parseInt(statusVal, 10);
             if (!isNaN(numVal)) {
-                whereClause += ` AND event.status_code = ${numVal}`;
+                whereClause += " AND event.status_code = {statusCodeExact:Int32}";
+                queryParams.statusCodeExact = numVal;
             } else {
-                whereClause += ` AND toString(event.status_code) ILIKE '%${statusVal}%'`;
+                whereClause += " AND toString(event.status_code) ILIKE {statusCodeLike:String}";
+                queryParams.statusCodeLike = `%${statusVal}%`;
             }
             return;
         }
 
         if (key === 'outcome') {
-            const outcomeVal = String(value);
-            whereClause += ` AND event.outcome = '${outcomeVal}'`;
+            whereClause += " AND event.outcome = {outcomeFilter:String}";
+            queryParams.outcomeFilter = String(value);
             return;
         }
 
@@ -814,17 +818,19 @@ export async function getProjectStats(
                 } else {
                     const numVal = parseInt(statusVal, 10);
                     if (!isNaN(numVal)) {
-                        whereClause += ` AND event.status_code = ${numVal}`;
+                        whereClause += " AND event.status_code = {statusCodeFilter:Int32}";
+                        queryParams.statusCodeFilter = numVal;
                     } else {
-                        whereClause += ` AND toString(event.status_code) ILIKE '%${statusVal}%'`;
+                        whereClause += " AND toString(event.status_code) ILIKE {statusCodeSearch:String}";
+                        queryParams.statusCodeSearch = `%${statusVal}%`;
                     }
                 }
                 return;
             }
 
             if (key === 'outcome') {
-                const outcomeVal = String(value);
-                whereClause += ` AND event.outcome = '${outcomeVal}'`;
+                whereClause += " AND event.outcome = {outcomeFilter:String}";
+                queryParams.outcomeFilter = String(value);
                 return;
             }
 
