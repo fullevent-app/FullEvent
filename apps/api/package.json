@@ -5,7 +5,7 @@
     "scripts": {
         "dev": "tsx watch src/index.ts",
         "build": "tsc",
-        "db:push-v2": "tsx src/scripts/init-schema-v2.ts"
+        "db:push": "tsx src/scripts/init-schema.ts"
     },
     "dependencies": {
         "@clickhouse/client": "^1.16.0",

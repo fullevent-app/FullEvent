@@ -1,13 +1,13 @@
-import { ensureSchemaV2, clickhouse } from '../lib/clickhouse-v2.js'
+import { ensureSchema, clickhouse } from '../lib/clickhouse.js'
 
 async function main() {
-    console.log('🚀 Initializing ClickHouse V2 schema...')
+    console.log('🚀 Initializing ClickHouse schema...')
     console.log('   Database:', process.env.CLICKHOUSE_DB || 'default')
     console.log('   Host:', process.env.CLICKHOUSE_HOST || 'http://localhost:8123')
     console.log('')
 
     // 1. Create the main events table
-    await ensureSchemaV2()
+    await ensureSchema()
 
     // Verify the table was created
     const result = await clickhouse.query({
@@ -29,7 +29,7 @@ async function main() {
     // Create daily aggregation table
     await clickhouse.command({
         query: `
-            CREATE TABLE IF NOT EXISTS daily_usage_v2 (
+            CREATE TABLE IF NOT EXISTS daily_usage (
                 project_id String,
                 day Date,
                 count UInt64
@@ -37,12 +37,12 @@ async function main() {
             ORDER BY (project_id, day)
         `
     })
-    console.log('   ✅ Created table daily_usage_v2')
+    console.log('   ✅ Created table daily_usage')
 
     // Create materialized view for automatic aggregation
     await clickhouse.command({
         query: `
-            CREATE MATERIALIZED VIEW IF NOT EXISTS daily_usage_v2_mv TO daily_usage_v2 AS
+            CREATE MATERIALIZED VIEW IF NOT EXISTS daily_usage_mv TO daily_usage AS
             SELECT 
                 _project_id AS project_id,
                 toStartOfDay(_timestamp) AS day,
@@ -51,10 +51,10 @@ async function main() {
             GROUP BY _project_id, day
         `
     })
-    console.log('   ✅ Created materialized view daily_usage_v2_mv')
+    console.log('   ✅ Created materialized view daily_usage_mv')
 
     console.log('')
-    console.log('✅ V2 schema initialized successfully!')
+    console.log('✅ Schema initialized successfully!')
     process.exit(0)
 }
 

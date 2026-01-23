@@ -4,17 +4,17 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { db } from './lib/db.js'
 import {
-    clickhouse as clickhouseV2,
-    ensureSchemaV2,
+    clickhouse,
+    ensureSchema,
     ingestWideEvent
-} from './lib/clickhouse-v2.js'
+} from './lib/clickhouse.js'
 import { apikey, project } from './lib/auth-schema.js'
 import { randomUUID, createHash } from 'node:crypto'
 import { eq, and } from 'drizzle-orm'
 import { stackAuth } from './lib/stack.js'
 
-// V2 schema is now the default
-ensureSchemaV2().catch(console.error)
+// Initialize Schema
+ensureSchema().catch(console.error)
 
 const app = new Hono()
 
@@ -69,13 +69,13 @@ async function getMonthlyEventCount(userId: string): Promise<number> {
     const projectIds = userProjects.map(p => p.id);
     const startOfMonthStr = startOfMonth.toISOString().split('T')[0];
 
-    const result = await clickhouseV2.query({
+    const result = await clickhouse.query({
         query: `
             SELECT sum(count) as count 
-            FROM daily_usage_v2 
-            WHERE project_id IN ({projectIds:Array(String)})
-            AND day >= {startOfMonth:Date}
-        `,
+            FROM daily_usage 
+            WHERE project_id IN({ projectIds: Array(String) })
+            AND day >= { startOfMonth: Date }
+    `,
         query_params: {
             projectIds,
             startOfMonth: startOfMonthStr
@@ -188,7 +188,7 @@ app.post('/ingest', async (c) => {
     // Check for duplicate ping (V2 schema)
     // We only allow one "fullevent.ping" event per project to prevent log pollution
     if (body.event === 'fullevent.ping' && projectId) {
-        const result = await clickhouseV2.query({
+        const result = await clickhouse.query({
             query: `
                 SELECT 1 
                 FROM events 
