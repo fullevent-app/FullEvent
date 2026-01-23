@@ -35,9 +35,10 @@ interface LogDetailsPanelProps {
     open: boolean;
     onClose: () => void;
     onSelectRelated?: (event: EventLog) => void;
+    prefetchCache?: Map<string, { data: unknown[]; pending: boolean }>;
 }
 
-export function LogDetailsPanel({ log, open, onClose, onSelectRelated }: LogDetailsPanelProps) {
+export function LogDetailsPanel({ log, open, onClose, onSelectRelated, prefetchCache }: LogDetailsPanelProps) {
     const [relatedEvents, setRelatedEvents] = useState<RelatedEvent[]>([]);
     const [relatedLoading, setRelatedLoading] = useState(false);
     const [expandedRelatedId, setExpandedRelatedId] = useState<string | null>(null);
@@ -69,6 +70,17 @@ export function LogDetailsPanel({ log, open, onClose, onSelectRelated }: LogDeta
             return;
         }
 
+        // Check prefetch cache first
+        const cacheKey = `${log.id}:${traceId}`;
+        const cached = prefetchCache?.get(cacheKey);
+
+        if (cached && !cached.pending && cached.data.length > 0) {
+            console.log(`[TIMING] Using prefetched data for ${cacheKey}`);
+            setRelatedEvents(cached.data as RelatedEvent[]);
+            setRelatedLoading(false);
+            return;
+        }
+
         setRelatedLoading(true);
         setRelatedEvents([]);
         // Reset expanded state when log changes
@@ -82,7 +94,7 @@ export function LogDetailsPanel({ log, open, onClose, onSelectRelated }: LogDeta
         } finally {
             setRelatedLoading(false);
         }
-    }, [log, traceId]);
+    }, [log, traceId, prefetchCache]);
 
     useEffect(() => {
         fetchRelatedEvents();
