@@ -17,18 +17,48 @@ export const clickhouse = createClient({
 })
 
 /**
- * Initialize the wide events schema
+ * Initialize the wide events schema and all supporting tables
+ * 
+ * Uses CREATE ... IF NOT EXISTS for idempotent startup - safe to run repeatedly
  */
 export async function ensureSchema() {
+    // 1. Create the main events table
     try {
         await clickhouse.command({ query: SCHEMA_V2_DDL })
-        console.log('✅ Wide events schema initialized (JSON column)')
+        console.log('✅ Events table initialized (JSON column)')
     } catch (err) {
         // Fallback to Object type if JSON column not supported
         console.warn('⚠️ JSON column failed, trying Object type fallback:', err)
         await clickhouse.command({ query: SCHEMA_V2_OBJECT_DDL })
-        console.log('✅ Wide events schema initialized (Object fallback)')
+        console.log('✅ Events table initialized (Object fallback)')
     }
+
+    // 2. Create daily usage aggregation table
+    await clickhouse.command({
+        query: `
+            CREATE TABLE IF NOT EXISTS daily_usage (
+                project_id String,
+                day Date,
+                count UInt64
+            ) ENGINE = SummingMergeTree()
+            ORDER BY (project_id, day)
+        `
+    })
+    console.log('✅ Daily usage table initialized')
+
+    // 3. Create materialized view for automatic aggregation
+    await clickhouse.command({
+        query: `
+            CREATE MATERIALIZED VIEW IF NOT EXISTS daily_usage_mv TO daily_usage AS
+            SELECT 
+                _project_id AS project_id,
+                toStartOfDay(_timestamp) AS day,
+                count() AS count
+            FROM events
+            GROUP BY _project_id, day
+        `
+    })
+    console.log('✅ Daily usage materialized view initialized')
 }
 
 /**
