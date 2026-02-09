@@ -6,7 +6,7 @@ import { eq, and, isNull, inArray } from "drizzle-orm";
 import { fullEvent } from "@/lib/fullevent";
 import { stackServerApp } from "@/stack/server";
 import { clickhouse } from "@/lib/clickhouse";
-import { getUserLimits, getUserTier, PolarMetadata } from "@/lib/subscription";
+import { TIER_LIMITS, PolarMetadata } from "@/lib/subscription";
 
 // Helper to get current user from Stack Auth
 async function getCurrentUser() {
@@ -103,9 +103,17 @@ export async function getMonthlyEventCount() {
 
 export async function getSubscriptionDetails() {
     const stackUser = await getCurrentUser();
-    const [tier, limits, eventCount, projects] = await Promise.all([
-        getUserTier(stackUser.id),
-        getUserLimits(stackUser.id),
+
+    // Extract tier and limits from already-fetched user metadata
+    // This avoids 2 extra Stack Auth API calls that were causing slowness
+    const metadata = stackUser.serverMetadata as {
+        polar?: { tier?: "free" | "starter" | "pro" };
+        limits?: { eventsPerMonth: number; maxProjects: number; retentionDays: number }
+    };
+    const tier = metadata?.polar?.tier || "free";
+    const limits = metadata?.limits || TIER_LIMITS[tier];
+
+    const [eventCount, projects] = await Promise.all([
         getMonthlyEventCount(),
         db.select().from(project).where(
             and(

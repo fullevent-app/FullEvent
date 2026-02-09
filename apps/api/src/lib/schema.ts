@@ -99,9 +99,14 @@ export function prepareWideEvent(
     eventType: string,
     userEvent: Record<string, unknown>
 ): WideEventInsert {
+    // Format timestamp for DateTime64 compatibility
+    // Remove 'Z' suffix and ensure consistent format across ClickHouse versions
+    const timestamp = (userEvent.timestamp as string) || new Date().toISOString();
+    const formattedTimestamp = timestamp.replace('Z', '').replace('T', ' ');
+
     return {
         _project_id: projectId,
-        _timestamp: (userEvent.timestamp as string) || new Date().toISOString(),
+        _timestamp: formattedTimestamp,
         _event_type: eventType,
         // The entire user event becomes queryable columns!
         event: userEvent,
