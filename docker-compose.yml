@@ -1,0 +1,32 @@
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: fullevent-clickhouse
+    ports:
+      - "18123:8123"  # HTTP interface (uncommon port to avoid conflicts)
+      - "19000:9000"  # Native TCP
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    environment:
+      - CLICKHOUSE_DB=default
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  turso:
+    image: ghcr.io/tursodatabase/libsql-server:latest
+    container_name: fullevent-turso
+    ports:
+      - "18080:8080"  # HTTP API (uncommon port to avoid conflicts)
+    volumes:
+      - turso_data:/var/lib/sqld
+    environment:
+      - SQLD_NODE=primary
+
+volumes:
+  clickhouse_data:
+  turso_data:

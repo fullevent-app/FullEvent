@@ -10,11 +10,12 @@ function getDb() {
     }
 
     // Support both Vercel Storage Connect naming and manual env var naming
-    const url = process.env.TURSO_DATABASE_URL || process.env.TURSO_DB_URL || 'file:./sqlite.db';
+    // Default to local Docker Turso for development
+    const url = process.env.TURSO_DATABASE_URL || process.env.TURSO_DB_URL || 'http://localhost:18080';
     const authToken = process.env.TURSO_AUTH_TOKEN || process.env.TURSO_DB_AUTH_TOKEN;
 
-    if (!url || url === 'file:./sqlite.db') {
-        console.warn('Warning: TURSO_DATABASE_URL not set. Using local SQLite database. This will not work in production/serverless environments.');
+    if (url === 'http://localhost:18080') {
+        console.log('Using local Docker Turso on localhost:18080. Run "pnpm start-deps" if not started.');
     }
 
     console.log('DB Config (lazy init):', {
@@ -28,7 +29,7 @@ function getDb() {
         url,
         authToken,
     });
-    
+
     _db = drizzle(client);
     return _db;
 }
