@@ -9,7 +9,7 @@ import { createClient } from '@clickhouse/client'
 import { SCHEMA_V2_DDL, SCHEMA_V2_OBJECT_DDL, prepareWideEvent, type WideEventInsert } from './schema.js'
 
 export const clickhouse = createClient({
-    url: process.env.CLICKHOUSE_HOST || 'http://localhost:8123',
+    url: process.env.CLICKHOUSE_HOST || 'http://localhost:18123',
     username: process.env.CLICKHOUSE_USER || 'default',
     password: process.env.CLICKHOUSE_PASSWORD,
     database: process.env.CLICKHOUSE_DB || 'default',

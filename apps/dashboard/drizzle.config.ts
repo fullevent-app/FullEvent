@@ -8,7 +8,8 @@ export default defineConfig({
     schema: "./lib/auth-schema.ts",
     out: "./drizzle",
     dbCredentials: {
-        url: process.env.TURSO_DATABASE_URL!,
+        // Default to local Docker Turso for development
+        url: process.env.TURSO_DATABASE_URL || "http://localhost:18080",
         authToken: process.env.TURSO_AUTH_TOKEN,
     },
 });
