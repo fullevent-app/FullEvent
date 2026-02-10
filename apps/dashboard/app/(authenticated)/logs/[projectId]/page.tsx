@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, use, useCallback, useRef } from "react";
-import { initLogsPage, getProjectEvents, getProjectStats, getRelatedEventsByTraceId } from "@/app/actions/projects";
+import { initLogsPage, getProjectEvents, getRelatedEventsByTraceId } from "@/app/actions/projects";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { RefreshCcw, Terminal, ArrowLeft } from "lucide-react";
@@ -30,7 +30,7 @@ interface EventLog {
 }
 
 import { LogDetailsPanel } from "./log-details-panel";
-import { LogStats, type ProjectStats } from "@/components/log-stats";
+import { LogCharts } from "@/components/log-charts";
 import { LogSearchInput, ParsedQuery, SearchSuggestions } from "@/components/log-search-input";
 import { ColumnSelector } from "@/components/column-selector";
 import { useLocalStorage } from "@/hooks/use-local-storage";
@@ -76,8 +76,6 @@ export default function ProjectLogsPage({ params }: PageProps) {
     const [hasMore, setHasMore] = useState(true);
     const [searchSuggestions, setSearchSuggestions] = useState<SearchSuggestions | undefined>(undefined);
     const [selectedColumns, setSelectedColumns] = useLocalStorage<string[]>(`project-logs-columns-${projectId}`, DEFAULT_COLUMNS);
-    const [stats, setStats] = useState<ProjectStats | undefined>(undefined);
-    const [statsLoading, setStatsLoading] = useState(true);
     const queryParamsRef = useRef<Record<string, unknown>>({});
     const eventsRef = useRef<EventLog[]>([]);
     const observerTarget = useRef(null);
@@ -86,18 +84,6 @@ export default function ProjectLogsPage({ params }: PageProps) {
     const prefetchCacheRef = useRef<Map<string, { data: unknown[]; pending: boolean }>>(new Map());
 
     const LIMIT = 100;
-
-    const loadStats = useCallback(async (params: Record<string, unknown> = {}) => {
-        setStatsLoading(true);
-        try {
-            const statsData = await getProjectStats(projectId, params as { search?: string;[key: string]: string | number | undefined });
-            setStats(statsData);
-        } catch (error) {
-            console.error("Failed to load stats:", error);
-        } finally {
-            setStatsLoading(false);
-        }
-    }, [projectId]);
 
     const loadEvents = useCallback(async (params: Record<string, unknown> = {}, append = false) => {
         setEventsLoading(true);
@@ -150,12 +136,10 @@ export default function ProjectLogsPage({ params }: PageProps) {
             setProject(result.project);
             setEvents(result.events);
             eventsRef.current = result.events;
-            setStats(result.stats as ProjectStats);
             setSearchSuggestions(result.suggestions as SearchSuggestions);
             setHasMore(result.hasMore);
             setLoading(false);
             setEventsLoading(false);
-            setStatsLoading(false);
         };
         init();
     }, [projectId]);
@@ -198,12 +182,10 @@ export default function ProjectLogsPage({ params }: PageProps) {
 
         queryParamsRef.current = params;
         loadEvents(params, false);
-        loadStats(params);
-    }, [loadEvents, loadStats]);
+    }, [loadEvents]);
 
     const handleRefresh = () => {
         loadEvents({}, false);
-        loadStats(queryParamsRef.current);
     };
 
     if (loading) {
@@ -261,7 +243,7 @@ export default function ProjectLogsPage({ params }: PageProps) {
                     </div>
                 </div>
 
-                <LogStats stats={stats} loading={statsLoading && !stats} />
+                <LogCharts projectId={projectId} searchParams={queryParamsRef.current} className="mt-2" />
 
                 <div className="mt-2">
                     <LogSearchInput onSearch={handleSearch} isLoading={eventsLoading} dynamicSuggestions={searchSuggestions} />
