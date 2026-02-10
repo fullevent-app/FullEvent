@@ -1098,3 +1098,158 @@ export async function checkForTestEvent(projectId: string) {
         eventCount: events.length // Note: This will logically be 1 due to the limit, but sufficient for boolean check
     };
 }
+
+/**
+ * Get histogram data for charts - time-bucketed event counts.
+ * Returns data for event volume, error rate, and latency percentiles.
+ */
+export async function getProjectHistogram(
+    projectId: string,
+    options?: {
+        buckets?: number;
+        timeRange?: '1h' | '6h' | '24h' | '7d' | '30d';
+        search?: string;
+        [key: string]: string | number | undefined;
+    }
+) {
+    const stackUser = await getCurrentUser();
+
+    // Verify user owns the project
+    const [p] = await db.select().from(project).where(
+        and(
+            eq(project.id, projectId),
+            eq(project.userId, stackUser.id)
+        )
+    );
+
+    if (!p) {
+        throw new Error("Project not found or unauthorized");
+    }
+
+    const buckets = options?.buckets || 12;
+    const timeRange = options?.timeRange || '24h';
+
+    // Calculate time interval based on range
+    const intervalMap: Record<string, string> = {
+        '1h': 'toStartOfFiveMinutes',
+        '6h': 'toStartOfFifteenMinutes',
+        '24h': 'toStartOfHour',
+        '7d': 'toStartOfInterval(_timestamp, INTERVAL 6 HOUR)',
+        '30d': 'toStartOfDay',
+    };
+
+    const rangeMap: Record<string, string> = {
+        '1h': '1 HOUR',
+        '6h': '6 HOUR',
+        '24h': '24 HOUR',
+        '7d': '7 DAY',
+        '30d': '30 DAY',
+    };
+
+    const intervalFunc = intervalMap[timeRange] || 'toStartOfHour';
+    const rangeClause = rangeMap[timeRange] || '24 HOUR';
+
+    // Build base where clause
+    const queryParams: Record<string, string | number> = { projectId };
+    let whereClause = "_project_id = {projectId:String} AND _timestamp >= now() - INTERVAL " + rangeClause;
+
+    // Apply search filters if provided
+    if (options?.search) {
+        whereClause += " AND toString(event) ILIKE {search:String}";
+        queryParams.search = `%${options.search}%`;
+    }
+
+    // Event volume histogram
+    const volumeQuery = `
+        SELECT 
+            ${intervalFunc.includes('toStartOfInterval') ? intervalFunc : intervalFunc + '(_timestamp)'} as bucket,
+            count() as value
+        FROM events
+        WHERE ${whereClause}
+        GROUP BY bucket
+        ORDER BY bucket ASC
+        LIMIT ${buckets}
+    `;
+
+    // Error histogram  
+    const errorQuery = `
+        SELECT 
+            ${intervalFunc.includes('toStartOfInterval') ? intervalFunc : intervalFunc + '(_timestamp)'} as bucket,
+            count() as value
+        FROM events
+        WHERE ${whereClause} AND (event.status_code >= 400 OR event.outcome = 'error')
+        GROUP BY bucket
+        ORDER BY bucket ASC
+        LIMIT ${buckets}
+    `;
+
+    // Latency percentiles histogram (only for events with duration_ms)
+    const latencyQuery = `
+        SELECT 
+            ${intervalFunc.includes('toStartOfInterval') ? intervalFunc : intervalFunc + '(_timestamp)'} as bucket,
+            quantile(0.5)(toFloat64OrZero(toString(event.duration_ms))) as p50,
+            quantile(0.95)(toFloat64OrZero(toString(event.duration_ms))) as p95,
+            quantile(0.99)(toFloat64OrZero(toString(event.duration_ms))) as p99
+        FROM events
+        WHERE ${whereClause} AND event.duration_ms IS NOT NULL
+        GROUP BY bucket
+        ORDER BY bucket ASC
+        LIMIT ${buckets}
+    `;
+
+    const [volumeResult, errorResult, latencyResult] = await Promise.all([
+        clickhouse.query({
+            query: volumeQuery,
+            query_params: queryParams,
+            format: 'JSONEachRow'
+        }),
+        clickhouse.query({
+            query: errorQuery,
+            query_params: queryParams,
+            format: 'JSONEachRow'
+        }),
+        clickhouse.query({
+            query: latencyQuery,
+            query_params: queryParams,
+            format: 'JSONEachRow'
+        })
+    ]);
+
+    const volumeData = await volumeResult.json() as { bucket: string; value: string }[];
+    const errorData = await errorResult.json() as { bucket: string; value: string }[];
+    const latencyData = await latencyResult.json() as { bucket: string; p50: number; p95: number; p99: number }[];
+
+    // Format bucket labels based on time range
+    const formatBucket = (bucket: string) => {
+        const date = new Date(bucket);
+        if (timeRange === '1h' || timeRange === '6h') {
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+        } else if (timeRange === '24h') {
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+        } else if (timeRange === '7d') {
+            return date.toLocaleDateString([], { weekday: 'short', hour: '2-digit', hour12: false });
+        } else {
+            return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+        }
+    };
+
+    return {
+        volume: volumeData.map(d => ({
+            bucket: formatBucket(d.bucket),
+            value: Number(d.value),
+            label: d.bucket
+        })),
+        errors: errorData.map(d => ({
+            bucket: formatBucket(d.bucket),
+            value: Number(d.value),
+            label: d.bucket
+        })),
+        latency: latencyData.map(d => ({
+            bucket: formatBucket(d.bucket),
+            p50: Math.round(d.p50 || 0),
+            p95: Math.round(d.p95 || 0),
+            p99: Math.round(d.p99 || 0),
+            label: d.bucket
+        })),
+    };
+}
