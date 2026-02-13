@@ -1,27 +1,27 @@
 {
-    "name": "fullevent-monorepo",
-    "version": "0.0.0",
-    "private": true,
-    "scripts": {
-        "build": "pnpm -r build",
-        "dev": "pnpm --parallel -r dev",
-        "dev:dashboard": "pnpm --filter @fullevent/dashboard dev",
-        "dev:api": "pnpm --filter @fullevent/api dev",
-        "dev:sdk": "pnpm --filter @fullevent/react dev",
-        "dev:docs": "pnpm --filter docs dev",
-        "start-deps": "docker compose up -d && sleep 2 && pnpm --filter @fullevent/dashboard db:push && echo '✅ ClickHouse on localhost:18123, Turso on localhost:18080 (schema pushed)'",
-        "restart-deps": "docker compose restart",
-        "stop-deps": "docker compose down",
-        "build:dashboard": "pnpm build:sdk-react && pnpm build:sdk-node && pnpm --filter @fullevent/dashboard build",
-        "build:api": "pnpm --filter @fullevent/api build",
-        "build:sdk-react": "pnpm --filter @fullevent/react build",
-        "build:sdk-node": "pnpm --filter @fullevent/node build",
-        "build:docs": "pnpm --filter docs build",
-        "lint": "pnpm -r lint"
-    },
-    "devDependencies": {
-        "typescript": "^5.0.0",
-        "next": "15.1.4"
-    },
-    "packageManager": "pnpm@10.11.0"
+  "name": "fullevent-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm --parallel -r dev",
+    "dev:dashboard": "pnpm --filter @fullevent/dashboard dev",
+    "dev:api": "pnpm --filter @fullevent/api dev",
+    "dev:sdk": "pnpm --filter @fullevent/react dev",
+    "dev:docs": "pnpm --filter docs dev",
+    "start-deps": "docker compose up -d && sleep 2 && pnpm --filter @fullevent/dashboard db:push && echo '✅ ClickHouse on localhost:18123, Turso on localhost:18080 (schema pushed)'",
+    "restart-deps": "docker compose restart",
+    "stop-deps": "docker compose down",
+    "build:dashboard": "pnpm build:sdk-react && pnpm build:sdk-node && pnpm --filter @fullevent/dashboard build",
+    "build:api": "pnpm --filter @fullevent/api build",
+    "build:sdk-react": "pnpm --filter @fullevent/react build",
+    "build:sdk-node": "pnpm --filter @fullevent/node build",
+    "build:docs": "pnpm --filter docs build",
+    "lint": "pnpm -r lint"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "next": "15.1.11"
+  },
+  "packageManager": "pnpm@10.11.0"
 }
